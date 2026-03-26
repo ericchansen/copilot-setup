@@ -22,15 +22,8 @@ class LspConfigStep:
 
         # LSP servers come from merged sources (first-wins)
         merged = getattr(ctx, "merged_config", None)
-        if merged and merged.lsp_servers:
-            # Write merged LSP data to a temp-like approach — generate_lsp_config
-            # expects a file path, so find the actual file from sources
-            lsp_json_path = ctx.lsp_servers_json
-            for src in (merged.sources or []):
-                candidate = src.path / "lsp-servers.json"
-                if candidate.is_file():
-                    lsp_json_path = candidate
-                    break
+        if merged and merged.lsp_servers and merged.lsp_servers_path:
+            lsp_json_path = merged.lsp_servers_path
         else:
             lsp_json_path = ctx.lsp_servers_json
 

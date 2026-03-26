@@ -1,12 +1,15 @@
 """Config source discovery, loading, and merging.
 
-A config source is a directory containing any combination of:
-  - mcp-servers.json  → MCP server definitions
-  - plugins.json      → Copilot CLI plugin definitions
-  - lsp-servers.json  → LSP server definitions
-  - config.portable.json → Portable Copilot settings
-  - copilot-instructions.md → Global instructions
-  - skills/           → Directory of skills (each with SKILL.md)
+A config source is a directory with a standard ``.copilot/`` layout::
+
+    repo/
+      .copilot/
+        mcp.json                  ← standard mcpServers format
+        local.json                ← gitignored: local paths, plugins, aliases
+        copilot-instructions.md   ← global instructions
+        config.portable.json      ← portable Copilot settings
+        lsp-servers.json          ← LSP server definitions
+        skills/                   ← skill directories with SKILL.md
 
 Sources are registered in ``~/.copilot/config-sources.json``::
 
@@ -16,8 +19,10 @@ Sources are registered in ``~/.copilot/config-sources.json``::
     ]
 
 Merge strategy:
-  - **Additive**: mcp-servers, plugins, skills — collected from all sources
+  - **Additive**: mcp-servers, skills, local_paths, plugins — collected from all sources
   - **First-wins**: instructions, portable config, LSP servers — first source that provides it
+
+Build recipes are auto-detected from directory contents (see ``lib/build_detect.py``).
 """
 
 from __future__ import annotations
@@ -33,16 +38,14 @@ logger = logging.getLogger(__name__)
 
 SOURCES_FILE = "config-sources.json"
 
-# Files the engine looks for in each config source
-_MCP_SERVERS = "mcp-servers.json"
-_PLUGINS = "plugins.json"
+# Standard .copilot/ directory layout
+_COPILOT_DIR = ".copilot"
+_MCP_JSON = "mcp.json"
+_LOCAL_JSON = "local.json"
 _LSP_SERVERS = "lsp-servers.json"
 _PORTABLE_JSON = "config.portable.json"
 _INSTRUCTIONS = "copilot-instructions.md"
 _SKILLS_DIR = "skills"
-
-# Legacy locations (for backward compatibility during migration)
-_LEGACY_COPILOT_DIR = ".copilot"
 
 
 @dataclass
@@ -53,9 +56,11 @@ class ConfigSource:
     path: Path
 
     # Loaded data (populated by load_source)
-    servers: list[dict] = field(default_factory=list)
-    plugins: list[dict] = field(default_factory=list)
+    servers: dict[str, dict] = field(default_factory=dict)  # standard mcpServers format
+    local_paths: dict[str, str] = field(default_factory=dict)  # server → local dev path
+    plugins: dict[str, dict] = field(default_factory=dict)  # server → {source, alias}
     lsp_servers: dict | None = None
+    lsp_servers_path: Path | None = None
     portable_config: Path | None = None
     instructions: Path | None = None
     skill_dirs: list[Path] = field(default_factory=list)
@@ -64,14 +69,21 @@ class ConfigSource:
     def exists(self) -> bool:
         return self.path.is_dir()
 
+    @property
+    def copilot_dir(self) -> Path:
+        """The .copilot/ directory for this source."""
+        return self.path / _COPILOT_DIR
+
 
 @dataclass
 class MergedConfig:
     """Result of merging all config sources."""
 
-    servers: list[dict] = field(default_factory=list)
-    plugins: list[dict] = field(default_factory=list)
+    servers: dict[str, dict] = field(default_factory=dict)  # name → standard entry
+    local_paths: dict[str, str] = field(default_factory=dict)  # server → local dev path
+    plugins: dict[str, dict] = field(default_factory=dict)  # server → {source, alias}
     lsp_servers: dict | None = None
+    lsp_servers_path: Path | None = None
     portable_config: Path | None = None
     instructions: Path | None = None
     skill_dirs: list[Path] = field(default_factory=list)
@@ -110,26 +122,26 @@ def discover_sources() -> list[ConfigSource]:
 
 
 def _find_file(source_path: Path, filename: str) -> Path | None:
-    """Look for a file at source root or in legacy .copilot/ subdir."""
-    # Prefer root-level
-    candidate = source_path / filename
+    """Look for a file in the source's .copilot/ directory, or at root as fallback."""
+    # Prefer .copilot/ (standard layout)
+    candidate = source_path / _COPILOT_DIR / filename
     if candidate.is_file():
         return candidate
-    # Fall back to .copilot/ subdir (legacy layout)
-    legacy = source_path / _LEGACY_COPILOT_DIR / filename
-    if legacy.is_file():
-        return legacy
+    # Fall back to root (legacy layout)
+    root = source_path / filename
+    if root.is_file():
+        return root
     return None
 
 
 def _find_skills_dir(source_path: Path) -> Path | None:
-    """Look for skills/ at root or in legacy .copilot/skills/."""
-    candidate = source_path / _SKILLS_DIR
+    """Look for skills/ in .copilot/ or at root."""
+    candidate = source_path / _COPILOT_DIR / _SKILLS_DIR
     if candidate.is_dir():
         return candidate
-    legacy = source_path / _LEGACY_COPILOT_DIR / _SKILLS_DIR
-    if legacy.is_dir():
-        return legacy
+    root = source_path / _SKILLS_DIR
+    if root.is_dir():
+        return root
     return None
 
 
@@ -139,33 +151,31 @@ def load_source(source: ConfigSource) -> ConfigSource:
         logger.warning("Config source '%s' path does not exist: %s", source.name, source.path)
         return source
 
-    # MCP servers (additive)
-    mcp_file = _find_file(source.path, _MCP_SERVERS)
+    # MCP servers — standard .copilot/mcp.json format (additive)
+    mcp_file = _find_file(source.path, _MCP_JSON)
     if mcp_file:
         try:
             data = json.loads(mcp_file.read_text("utf-8"))
-            raw_servers = data.get("servers", []) if isinstance(data, dict) else data
-            # Strip "category" field — the engine doesn't need it
-            for s in raw_servers:
-                s.pop("category", None)
-            source.servers = raw_servers
+            source.servers = data.get("mcpServers", {})
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", mcp_file, exc)
 
-    # Plugins (additive)
-    plugins_file = _find_file(source.path, _PLUGINS)
-    if plugins_file:
+    # Local overrides — .copilot/local.json (gitignored, engine-only)
+    local_file = _find_file(source.path, _LOCAL_JSON)
+    if local_file:
         try:
-            data = json.loads(plugins_file.read_text("utf-8"))
-            source.plugins = data.get("plugins", []) if isinstance(data, dict) else data
+            local_data = json.loads(local_file.read_text("utf-8"))
+            source.local_paths = local_data.get("paths", {})
+            source.plugins = local_data.get("plugins", {})
         except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Failed to load %s: %s", plugins_file, exc)
+            logger.warning("Failed to load %s: %s", local_file, exc)
 
     # LSP servers (first-wins)
     lsp_file = _find_file(source.path, _LSP_SERVERS)
     if lsp_file:
         try:
             source.lsp_servers = json.loads(lsp_file.read_text("utf-8"))
+            source.lsp_servers_path = lsp_file
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", lsp_file, exc)
 
@@ -191,17 +201,30 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
     """Merge loaded config sources into a unified configuration.
 
     Merge strategies:
-      - **Additive**: servers, plugins, skill_dirs — all collected
+      - **Additive**: servers, skill_dirs — all collected
       - **First-wins**: lsp_servers, portable_config, instructions — first source providing it
+
+    Server deduplication: first source providing a server name wins.
     """
     merged = MergedConfig(sources=sources)
 
     for source in sources:
-        # Additive: servers
-        merged.servers.extend(source.servers)
+        # Additive: servers (first occurrence of each name wins)
+        for name, entry in source.servers.items():
+            if name not in merged.servers:
+                merged.servers[name] = entry
+            else:
+                logger.info("Duplicate server '%s' — keeping first occurrence", name)
 
-        # Additive: plugins
-        merged.plugins.extend(source.plugins)
+        # Additive: local paths (first occurrence of each name wins)
+        for name, path in source.local_paths.items():
+            if name not in merged.local_paths:
+                merged.local_paths[name] = path
+
+        # Additive: plugins (first occurrence of each name wins)
+        for name, plugin in source.plugins.items():
+            if name not in merged.plugins:
+                merged.plugins[name] = plugin
 
         # Additive: skill dirs
         merged.skill_dirs.extend(source.skill_dirs)
@@ -209,6 +232,7 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
         # First-wins: LSP servers
         if merged.lsp_servers is None and source.lsp_servers is not None:
             merged.lsp_servers = source.lsp_servers
+            merged.lsp_servers_path = source.lsp_servers_path
 
         # First-wins: portable config
         if merged.portable_config is None and source.portable_config is not None:
@@ -217,27 +241,5 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
         # First-wins: instructions
         if merged.instructions is None and source.instructions is not None:
             merged.instructions = source.instructions
-
-    # Deduplicate servers by name (first occurrence wins)
-    seen_names: set[str] = set()
-    deduped: list[dict] = []
-    for s in merged.servers:
-        name = s.get("name", "")
-        if name not in seen_names:
-            seen_names.add(name)
-            deduped.append(s)
-        else:
-            logger.info("Duplicate server '%s' — keeping first occurrence", name)
-    merged.servers = deduped
-
-    # Deduplicate plugins by name
-    seen_plugins: set[str] = set()
-    deduped_plugins: list[dict] = []
-    for p in merged.plugins:
-        name = p.get("name", "")
-        if name not in seen_plugins:
-            seen_plugins.add(name)
-            deduped_plugins.append(p)
-    merged.plugins = deduped_plugins
 
     return merged

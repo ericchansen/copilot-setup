@@ -213,7 +213,7 @@ class UI:
 
     # ── Summary table ───────────────────────────────────────────────────────
 
-    def summary(self, data: dict, enabled_servers: list) -> None:
+    def summary(self, data: dict, enabled_servers: dict | list) -> None:
         """Box-drawn summary table with ┌┐├┤└┘┬┴│─ borders."""
         rows = self._build_summary_rows(data, enabled_servers)
         if not rows:
@@ -252,7 +252,7 @@ class UI:
     def _build_summary_rows(
         self,
         data: dict,
-        enabled_servers: list,
+        enabled_servers: dict | list,
     ) -> list[tuple[str, str]]:
         rows: list[tuple[str, str]] = []
 

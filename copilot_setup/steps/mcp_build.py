@@ -7,12 +7,11 @@ import subprocess
 from pathlib import Path
 
 from copilot_setup.models import SetupContext, StepResult
-from copilot_setup.ui_shim import UIShim
-from lib.git_helpers import clone_or_pull
+from lib.build_detect import detect_build_commands
 
 
 class McpBuildStep:
-    """Clone or pull, then build, each local MCP server."""
+    """Build local MCP servers that have paths in local.json."""
 
     name = "MCP · Build Servers"
 
@@ -22,96 +21,60 @@ class McpBuildStep:
     def run(self, ctx: SetupContext) -> StepResult:
         result = StepResult()
 
-        # Servers come pre-merged from config sources — no category filtering needed
-        if not hasattr(ctx, "enabled_servers") or not ctx.enabled_servers:
-            ctx.enabled_servers = getattr(ctx, "enabled_servers", [])
+        enabled = getattr(ctx, "enabled_servers", {})
+        merged = getattr(ctx, "merged_config", None)
+        local_paths = merged.local_paths if merged else {}
 
-        # Compute plugin-managed names (needs enabled_servers + plugin_server_names from plugins step)
+        # Compute plugin-managed names (servers with plugins confirmed in plugin step)
         plugin_server_names = getattr(ctx, "plugin_server_names", set())
+        local_clone_map: dict[str, Path] = getattr(ctx, "local_clone_map", {})
         ctx.plugin_managed_names = {
-            s["name"] for s in ctx.enabled_servers if s.get("pluginFallback") and s["name"] in plugin_server_names
+            name for name in enabled
+            if name in plugin_server_names and name not in local_clone_map
         }
 
-        local_clone_map: dict[str, Path] = getattr(ctx, "local_clone_map", {})
-
-        # Load .mcp-paths.json (stored in ~/.copilot/ for the engine)
+        # Load stored paths from previous runs
         mcp_paths_file = ctx.copilot_home / ".mcp-paths.json"
         try:
             mcp_paths: dict = json.loads(mcp_paths_file.read_text("utf-8")) if mcp_paths_file.exists() else {}
         except json.JSONDecodeError:
             mcp_paths = {}
 
-        auth_dict = {
-            "gh_available": ctx.auth_state.gh_available,
-            "ssh_available": ctx.auth_state.ssh_available,
-            "prefer_ssh": ctx.auth_state.prefer_ssh,
-        }
+        failed_names: list[str] = []
+        any_buildable = False
 
-        abort_clones = False
-        failed_servers: list[dict] = []
+        for name in enabled:
+            local_path_str = local_paths.get(name)
+            if not local_path_str:
+                continue  # No local path → server is ready-to-use (npx, HTTP, or plugin)
 
-        for server in ctx.enabled_servers:
-            if server.get("type") != "local":
-                continue
-            if abort_clones:
-                break
-
-            server_name = server["name"]
+            any_buildable = True
 
             # Plugin-managed server without local clone → plugin handles everything
-            if server_name in ctx.plugin_managed_names and server_name not in local_clone_map:
-                result.item(server_name, "info", "handled by plugin — skipping build")
+            if name in ctx.plugin_managed_names:
+                result.item(name, "info", "handled by plugin — skipping build")
                 continue
 
-            resolved_path = None
-            stored = mcp_paths.get(server_name)
+            expanded = Path(local_path_str).expanduser().resolve()
+
+            # Check stored path first, then local.json path
+            stored = mcp_paths.get(name)
             if stored and Path(stored).exists():
                 resolved_path = stored
-                result.item(server_name, "info", f"using stored path: {resolved_path}")
+                result.item(name, "info", f"using stored path: {resolved_path}")
+            elif expanded.exists():
+                resolved_path = str(expanded)
             else:
-                detected = None
-                for dp in server.get("defaultPaths", []):
-                    expanded = Path(dp).expanduser()
-                    if expanded.exists():
-                        detected = str(expanded.resolve())
-                        break
-                if not detected:
-                    ext_path = ctx.external_dir / server.get("cloneDir", server["name"])
-                    if ext_path.exists():
-                        detected = str(ext_path.resolve())
+                result.item(name, "warning", f"local path not found: {expanded}")
+                continue
 
-                resolved_path = detected or str((ctx.external_dir / server.get("cloneDir", server["name"])).resolve())
+            mcp_paths[name] = resolved_path
 
-            if not Path(resolved_path).exists():
-                # Clone needed
-                clone_shim = UIShim()
-
-                clone_result, effective_path = clone_or_pull(
-                    server.get("repo", ""),
-                    resolved_path,
-                    server_name,
-                    auth_dict,
-                    True,  # Force non-interactive when using UIShim
-                    clone_shim,
-                )
-                for name, status, detail in clone_shim.items:
-                    result.item(name, status, detail)
-
-                resolved_path = effective_path
-                if clone_result == "aborted":
-                    abort_clones = True
-                    break
-                if clone_result in ("skipped", "clone-failed", "identity-check-failed"):
-                    result.item(server_name, "failed", f"clone: {clone_result}")
-                    continue
-
-            mcp_paths[server_name] = resolved_path
-
-            # Build
-            if server.get("build"):
-                result.item(server_name, "info", "building…")
+            # Auto-detect and run build
+            build_cmds = detect_build_commands(Path(resolved_path))
+            if build_cmds:
                 build_ok = True
-                for cmd in server["build"]:
+                for cmd in build_cmds:
                     r = subprocess.run(
                         cmd,
                         shell=True,
@@ -122,23 +85,24 @@ class McpBuildStep:
                         errors="replace",
                     )
                     if r.returncode != 0:
-                        result.item(server_name, "failed", f"'{cmd}' failed (exit {r.returncode})")
+                        result.item(name, "failed", f"'{cmd}' failed (exit {r.returncode})")
                         build_ok = False
                         break
                 if build_ok:
-                    result.item(server_name, "success", "built")
+                    result.item(name, "success", "built")
                 else:
-                    failed_servers.append(server)
+                    failed_names.append(name)
+            else:
+                result.item(name, "info", f"no build needed — {resolved_path}")
 
-        # Remove failed builds
-        for s in failed_servers:
-            if s in ctx.enabled_servers:
-                ctx.enabled_servers.remove(s)
+        # Remove failed builds from enabled servers
+        for n in failed_names:
+            enabled.pop(n, None)
 
         mcp_paths_file.write_text(json.dumps(mcp_paths, indent=2) + "\n", "utf-8")
         ctx.mcp_paths = mcp_paths
 
-        if not any(s.get("type") == "local" for s in ctx.enabled_servers):
+        if not any_buildable:
             result.item("Local MCP servers", "info", "none to build")
 
         return result

@@ -163,22 +163,29 @@ class ShellAliasStep:
     name = "Setup · Shell Aliases"
 
     def check(self, ctx: SetupContext) -> bool:
-        # Run when any merged plugins have aliases
-        merged_plugins = getattr(ctx, "merged_plugins", [])
-        return any(p.get("alias") for p in merged_plugins)
+        # Run when any plugins have aliases
+        merged = getattr(ctx, "merged_config", None)
+        if not merged:
+            return False
+        return any(info.get("alias") for info in merged.plugins.values())
 
     def run(self, ctx: SetupContext) -> StepResult:
         result = StepResult()
 
-        merged_plugins = getattr(ctx, "merged_plugins", [])
-        alias_plugins = [p for p in merged_plugins if p.get("alias")]
+        merged = getattr(ctx, "merged_config", None)
+        if not merged:
+            return result
+
+        alias_plugins = [
+            (name, info) for name, info in merged.plugins.items()
+            if info.get("alias")
+        ]
         if not alias_plugins:
             return result
 
-        for plugin in alias_plugins:
-            alias = plugin["alias"]
-            name = plugin["name"]
-            source = plugin["source"]
+        for name, info in alias_plugins:
+            alias = info["alias"]
+            source = info.get("source", "")
             clone_path = ctx.local_clone_map.get(name)
 
             fmt = {

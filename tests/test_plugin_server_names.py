@@ -1,42 +1,37 @@
 """Verify that plugin_server_names is derived from install outcomes, not intent.
 
-Updated for the source-based architecture: plugins and servers come from
-merged config sources, not a hardcoded PLUGINS list or mcp-servers.json in the engine repo.
+Updated for local.json-based architecture: plugins and local paths come from
+local.json in config sources, servers from standard .copilot/mcp.json.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import patch
 
 from copilot_setup.models import SetupContext
 from copilot_setup.steps.plugins import PluginsStep
 
-# Sample data matching what copilot-config-work would provide
-_MSX_SERVER = {
-    "name": "msx-mcp",
-    "type": "local",
-    "command": "node",
-    "entryPoint": "dist/index.js",
-    "repo": "https://github.com/mcaps-microsoft/MSX-MCP.git",
-    "cloneDir": "MSX-MCP",
-    "defaultPaths": [],
-    "build": ["npm install", "npm run build"],
-    "tools": ["*"],
-    "pluginFallback": "mcaps-microsoft/MSX-MCP",
-}
+# Standard mcp.json entry for the server
+_MSX_SERVER_ENTRY = {"command": "node", "args": ["dist/index.js"]}
 
-_MSX_PLUGIN = {
-    "name": "msx-mcp",
-    "source": "mcaps-microsoft/MSX-MCP",
-    "localServerName": "msx-mcp",
-    "alias": "copilot-msx",
-}
+# Plugin info (as it would appear in local.json)
+_MSX_PLUGIN_INFO = {"source": "mcaps-microsoft/MSX-MCP", "alias": "copilot-msx"}
 
 
-def _make_ctx(tmp_path: Path, servers: list[dict] | None = None, plugins: list[dict] | None = None) -> SetupContext:
-    """Build a SetupContext with injected servers and plugins (source-based model)."""
+@dataclass
+class FakeMergedConfig:
+    """Minimal mock of MergedConfig for tests."""
+    plugins: dict[str, dict] = field(default_factory=dict)
+    local_paths: dict[str, str] = field(default_factory=dict)
+
+
+def _make_ctx(tmp_path: Path, servers: dict[str, dict] | None = None,
+              plugins: dict[str, dict] | None = None,
+              local_paths: dict[str, str] | None = None) -> SetupContext:
+    """Build a SetupContext with injected servers and merged config."""
     root = Path(__file__).resolve().parent.parent
     args = argparse.Namespace(clean_orphans=False, non_interactive=True)
     ctx = SetupContext(
@@ -51,19 +46,18 @@ def _make_ctx(tmp_path: Path, servers: list[dict] | None = None, plugins: list[d
         portable_json=Path("__none__"),
         args=args,
     )
-    # Inject merged data (as setup.py does)
-    ctx.enabled_servers = servers or [_MSX_SERVER.copy()]
-    ctx.merged_plugins = plugins or [_MSX_PLUGIN.copy()]
+    ctx.enabled_servers = servers if servers is not None else {"msx-mcp": _MSX_SERVER_ENTRY.copy()}
+    ctx.merged_config = FakeMergedConfig(
+        plugins=plugins if plugins is not None else {"msx-mcp": _MSX_PLUGIN_INFO.copy()},
+        local_paths=local_paths or {},
+    )
     return ctx
 
 
 def test_empty_when_copilot_cli_missing(tmp_path: Path):
     """copilot not on PATH, no local clone → empty set."""
     ctx = _make_ctx(tmp_path)
-    with (
-        patch("lib.skills.shutil.which", return_value=None),
-        patch("copilot_setup.steps.plugins.link_local_plugins"),
-    ):
+    with patch("lib.skills.shutil.which", return_value=None), patch("copilot_setup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == set()
 
@@ -77,11 +71,7 @@ def test_empty_when_install_fails(tmp_path: Path):
             return ""
         return None  # install fails
 
-    with (
-        patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"),
-        patch("lib.skills._run_copilot", side_effect=_fake),
-        patch("copilot_setup.steps.plugins.link_local_plugins"),
-    ):
+    with patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"), patch("lib.skills._run_copilot", side_effect=_fake), patch("copilot_setup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == set()
 
@@ -95,11 +85,7 @@ def test_present_when_already_installed(tmp_path: Path):
             return "msx-mcp    mcaps-microsoft/MSX-MCP    1.0.0"
         return "ok"
 
-    with (
-        patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"),
-        patch("lib.skills._run_copilot", side_effect=_fake),
-        patch("copilot_setup.steps.plugins.link_local_plugins"),
-    ):
+    with patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"), patch("lib.skills._run_copilot", side_effect=_fake), patch("copilot_setup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
 
@@ -113,11 +99,7 @@ def test_present_when_fresh_install_succeeds(tmp_path: Path):
             return ""
         return "installed"
 
-    with (
-        patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"),
-        patch("lib.skills._run_copilot", side_effect=_fake),
-        patch("copilot_setup.steps.plugins.link_local_plugins"),
-    ):
+    with patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"), patch("lib.skills._run_copilot", side_effect=_fake), patch("copilot_setup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
 
@@ -127,44 +109,17 @@ def test_present_when_local_clone_exists(tmp_path: Path):
     clone = tmp_path / "MSX-MCP"
     clone.mkdir()
     (clone / ".git").mkdir()
-    (clone / "dist").mkdir()
-    (clone / "dist" / "index.js").write_text("// stub")
 
-    server = _MSX_SERVER.copy()
-    server["defaultPaths"] = [str(clone)]
+    ctx = _make_ctx(tmp_path, local_paths={"msx-mcp": str(clone)})
 
-    ctx = _make_ctx(tmp_path, servers=[server])
-
-    with (
-        patch("lib.skills.shutil.which", return_value=None),
-        patch("copilot_setup.steps.plugins.link_local_plugins"),
-    ):
+    with patch("lib.skills.shutil.which", return_value=None), patch("copilot_setup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
     assert "msx-mcp" in ctx.local_clone_map
 
 
-def test_no_plugins_in_sources(tmp_path: Path):
-    """No plugins in any config source → no work to do."""
-    ctx = _make_ctx(tmp_path, servers=[], plugins=[])
+def test_no_plugins_defined(tmp_path: Path):
+    """No plugins in local.json → no work to do."""
+    ctx = _make_ctx(tmp_path, servers={}, plugins={})
     result = PluginsStep().run(ctx)
-    # The step should complete without error
     assert result is not None
-
-
-if __name__ == "__main__":
-    import tempfile
-
-    tests = [
-        ("empty when copilot CLI missing", test_empty_when_copilot_cli_missing),
-        ("empty when install fails", test_empty_when_install_fails),
-        ("present when already installed", test_present_when_already_installed),
-        ("present when fresh install succeeds", test_present_when_fresh_install_succeeds),
-        ("present when local clone exists", test_present_when_local_clone_exists),
-        ("no plugins in sources", test_no_plugins_in_sources),
-    ]
-    for label, fn in tests:
-        with tempfile.TemporaryDirectory() as td:
-            fn(Path(td))
-            print(f"PASS: {label}")
-    print(f"\nAll {len(tests)} scenarios passed!")

@@ -14,41 +14,30 @@ def _write_json(path: Path, data: object) -> None:
 
 
 class TestLoadSource:
-    def test_loads_servers(self, tmp_path: Path):
+    def test_loads_servers_from_mcp_json(self, tmp_path: Path):
+        """Standard .copilot/mcp.json format."""
         src_dir = tmp_path / "personal"
-        src_dir.mkdir()
-        _write_json(src_dir / "mcp-servers.json", {
-            "servers": [
-                {"name": "azure-mcp", "category": "base", "type": "npx"},
-                {"name": "context7", "type": "http"},
-            ]
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(copilot / "mcp.json", {
+            "mcpServers": {
+                "azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]},
+                "context7": {"url": "https://mcp.context7.com/mcp"},
+            }
         })
 
         source = ConfigSource(name="personal", path=src_dir)
         load_source(source)
 
         assert len(source.servers) == 2
-        # Category field should be stripped
-        assert "category" not in source.servers[0]
-        assert source.servers[0]["name"] == "azure-mcp"
-
-    def test_loads_plugins(self, tmp_path: Path):
-        src_dir = tmp_path / "work"
-        src_dir.mkdir()
-        _write_json(src_dir / "plugins.json", {
-            "plugins": [{"name": "msx-mcp", "source": "mcaps-microsoft/MSX-MCP"}]
-        })
-
-        source = ConfigSource(name="work", path=src_dir)
-        load_source(source)
-
-        assert len(source.plugins) == 1
-        assert source.plugins[0]["name"] == "msx-mcp"
+        assert "azure-mcp" in source.servers
+        assert "context7" in source.servers
 
     def test_loads_instructions(self, tmp_path: Path):
         src_dir = tmp_path / "personal"
-        src_dir.mkdir()
-        (src_dir / "copilot-instructions.md").write_text("# Instructions", "utf-8")
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        (copilot / "copilot-instructions.md").write_text("# Instructions", "utf-8")
 
         source = ConfigSource(name="personal", path=src_dir)
         load_source(source)
@@ -58,7 +47,7 @@ class TestLoadSource:
 
     def test_loads_skills_dir(self, tmp_path: Path):
         src_dir = tmp_path / "personal"
-        skills = src_dir / "skills" / "my-skill"
+        skills = src_dir / ".copilot" / "skills" / "my-skill"
         skills.mkdir(parents=True)
         (skills / "SKILL.md").write_text("---\nname: my-skill\n---", "utf-8")
 
@@ -68,61 +57,64 @@ class TestLoadSource:
         assert len(source.skill_dirs) == 1
         assert source.skill_dirs[0].name == "skills"
 
-    def test_legacy_copilot_dir_fallback(self, tmp_path: Path):
-        src_dir = tmp_path / "old-layout"
+    def test_root_fallback(self, tmp_path: Path):
+        """Files at root (legacy layout) are found as fallback."""
+        src_dir = tmp_path / "legacy"
         src_dir.mkdir()
-        legacy = src_dir / ".copilot"
-        legacy.mkdir()
-        (legacy / "copilot-instructions.md").write_text("# Legacy", "utf-8")
+        (src_dir / "copilot-instructions.md").write_text("# Legacy", "utf-8")
 
-        skills = legacy / "skills" / "some-skill"
+        skills = src_dir / "skills" / "some-skill"
         skills.mkdir(parents=True)
         (skills / "SKILL.md").write_text("---\nname: some-skill\n---", "utf-8")
 
-        source = ConfigSource(name="old", path=src_dir)
+        source = ConfigSource(name="legacy", path=src_dir)
+        load_source(source)
+
+        assert source.instructions is not None
+        assert len(source.skill_dirs) == 1
+
+    def test_copilot_dir_preferred_over_root(self, tmp_path: Path):
+        """.copilot/ is preferred when both exist."""
+        src_dir = tmp_path / "both"
+        src_dir.mkdir()
+        (src_dir / "copilot-instructions.md").write_text("# Root", "utf-8")
+        copilot = src_dir / ".copilot"
+        copilot.mkdir()
+        (copilot / "copilot-instructions.md").write_text("# Copilot", "utf-8")
+
+        source = ConfigSource(name="both", path=src_dir)
         load_source(source)
 
         assert source.instructions is not None
         assert ".copilot" in str(source.instructions)
-        assert len(source.skill_dirs) == 1
 
     def test_missing_path(self, tmp_path: Path):
         source = ConfigSource(name="gone", path=tmp_path / "nonexistent")
         load_source(source)
-        assert source.servers == []
-        assert source.plugins == []
+        assert source.servers == {}
         assert source.instructions is None
 
 
 class TestMergeSources:
     def test_additive_servers(self, tmp_path: Path):
         s1 = ConfigSource(name="a", path=tmp_path)
-        s1.servers = [{"name": "srv1", "type": "npx"}]
+        s1.servers = {"srv1": {"command": "npx", "args": []}}
         s2 = ConfigSource(name="b", path=tmp_path)
-        s2.servers = [{"name": "srv2", "type": "http"}]
+        s2.servers = {"srv2": {"url": "https://example.com"}}
 
         merged = merge_sources([s1, s2])
         assert len(merged.servers) == 2
-        assert {s["name"] for s in merged.servers} == {"srv1", "srv2"}
+        assert set(merged.servers.keys()) == {"srv1", "srv2"}
 
     def test_deduplicates_servers(self, tmp_path: Path):
         s1 = ConfigSource(name="a", path=tmp_path)
-        s1.servers = [{"name": "dup", "type": "npx", "version": "1"}]
+        s1.servers = {"dup": {"command": "npx", "args": [], "version": "1"}}
         s2 = ConfigSource(name="b", path=tmp_path)
-        s2.servers = [{"name": "dup", "type": "npx", "version": "2"}]
+        s2.servers = {"dup": {"command": "npx", "args": [], "version": "2"}}
 
         merged = merge_sources([s1, s2])
         assert len(merged.servers) == 1
-        assert merged.servers[0]["version"] == "1"  # first wins
-
-    def test_additive_plugins(self, tmp_path: Path):
-        s1 = ConfigSource(name="a", path=tmp_path)
-        s1.plugins = [{"name": "p1"}]
-        s2 = ConfigSource(name="b", path=tmp_path)
-        s2.plugins = [{"name": "p2"}]
-
-        merged = merge_sources([s1, s2])
-        assert len(merged.plugins) == 2
+        assert merged.servers["dup"]["version"] == "1"  # first wins
 
     def test_additive_skills(self, tmp_path: Path):
         d1 = tmp_path / "a" / "skills"
@@ -165,7 +157,6 @@ class TestMergeSources:
 
     def test_empty_sources(self):
         merged = merge_sources([])
-        assert merged.servers == []
-        assert merged.plugins == []
+        assert merged.servers == {}
         assert merged.skill_dirs == []
         assert merged.instructions is None

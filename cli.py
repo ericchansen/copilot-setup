@@ -161,10 +161,9 @@ def _run_setup(args: argparse.Namespace) -> None:
     )
 
     # Inject merged data into context for steps to consume
-    ctx.enabled_servers = merged.servers
+    ctx.enabled_servers = merged.servers  # dict[str, dict] — name → standard entry
     ctx.merged_config = merged  # type: ignore[attr-defined]
     ctx.all_skill_dirs = merged.skill_dirs  # type: ignore[attr-defined]
-    ctx.merged_plugins = merged.plugins  # type: ignore[attr-defined]
 
     # Build step name list for the UI progress bar
     step_names = [s.name for s in ALL_STEPS]
@@ -177,7 +176,7 @@ def _run_setup(args: argparse.Namespace) -> None:
     # Summary — bridge to old UI summary for now
     mcp_build_items = summary.step_items("MCP · Build Servers")
     config_link_items = summary.step_items("Setup · Config Symlinks")
-    config_servers = [s for s in ctx.enabled_servers if s["name"] not in ctx.plugin_managed_names]
+    config_servers = {n: e for n, e in ctx.enabled_servers.items() if n not in ctx.plugin_managed_names}
 
     old_summary: dict = {
         "backed_up": False,
@@ -216,9 +215,14 @@ def _run_setup(args: argparse.Namespace) -> None:
         # Find the lsp-servers.json from the first source that has it
         lsp_json_path = None
         for src in sources:
-            candidate = src.path / "lsp-servers.json"
+            candidate = src.copilot_dir / "lsp-servers.json"
             if candidate.is_file():
                 lsp_json_path = candidate
+                break
+            # Fallback to root
+            root_candidate = src.path / "lsp-servers.json"
+            if root_candidate.is_file():
+                lsp_json_path = root_candidate
                 break
         if lsp_json_path:
             run_optional_deps(ui, lsp_json_path, lsp_config_path, old_summary)

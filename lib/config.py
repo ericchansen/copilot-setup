@@ -41,54 +41,55 @@ def patch_config_json(
 # ---------------------------------------------------------------------------
 
 
-def _build_mcp_entry(server: dict, mcp_paths: dict, external_dir: Path) -> dict:
-    """Build a single mcpServers entry from a source server definition."""
-    server_type = server["type"]
-    tools = server.get("tools", ["*"])
+def _build_mcp_entry(name: str, entry: dict, mcp_paths: dict, external_dir: Path) -> dict:
+    """Build a single mcpServers entry for the final config.
 
-    if server_type == "npx":
-        args = ["-y", server["package"], *server.get("args", [])]
-        return {"type": "local", "command": "npx", "args": args, "tools": tools}
+    Entries are already in standard format from .copilot/mcp.json.
+    For servers with local paths (from build step), resolve relative args
+    to absolute paths.
+    """
+    # HTTP servers — pass through as-is
+    if "url" in entry:
+        result: dict = {"type": "http", "url": entry["url"]}
+        if entry.get("headers"):
+            result["headers"] = entry["headers"]
+        result["tools"] = entry.get("tools", ["*"])
+        return result
 
-    if server_type == "http":
-        entry: dict = {"type": "http", "url": server["url"], "tools": tools}
-        if server.get("headers"):
-            entry["headers"] = server["headers"]
-        return entry
+    # Command-based servers
+    command = entry.get("command", "")
+    args = list(entry.get("args", []))
+    tools = entry.get("tools", ["*"])
 
-    # type == "local"
-    command = server["command"]
-    entry_point = server.get("entryPoint", "")
+    # If we have a local build path, resolve relative args to absolute paths
+    stored = mcp_paths.get(name)
+    if stored:
+        resolved_args = []
+        for arg in args:
+            candidate = Path(stored) / arg
+            if candidate.exists():
+                resolved_args.append(str(candidate.resolve()))
+            else:
+                resolved_args.append(arg)
+        args = resolved_args
 
-    if entry_point:
-        # File-based server: resolve entryPoint relative to clone path
-        stored = mcp_paths.get(server["name"])
-        if stored:
-            full_entry = str(Path(stored) / entry_point)
-        else:
-            clone_dir = server.get("cloneDir", server["name"])
-            full_entry = str(external_dir / clone_dir / entry_point)
-        full_entry = str(Path(full_entry).resolve())
-        return {"type": "local", "command": command, "args": [full_entry], "tools": tools}
-
-    # Command-based server: command IS the server (e.g., pip-installed console script)
-    return {"type": "local", "command": command, "args": server.get("args", []), "tools": tools}
+    return {"type": "local", "command": command, "args": args, "tools": tools}
 
 
 def generate_mcp_config(
-    servers: list[dict],
+    servers: dict[str, dict],
     mcp_paths: dict,
     external_dir: Path,
     output_path: Path,
 ) -> None:
-    """Write ``~/.copilot/mcp-config.json`` from the enabled server list."""
+    """Write ``~/.copilot/mcp-config.json`` from the enabled server dict."""
     # Remove legacy symlink/junction if present
     if is_link(output_path):
         output_path.unlink()
 
     mcp_servers: dict = {}
-    for server in servers:
-        mcp_servers[server["name"]] = _build_mcp_entry(server, mcp_paths, external_dir)
+    for name, entry in servers.items():
+        mcp_servers[name] = _build_mcp_entry(name, entry, mcp_paths, external_dir)
 
     output_path.write_text(
         json.dumps({"mcpServers": mcp_servers}, indent=2) + "\n",
