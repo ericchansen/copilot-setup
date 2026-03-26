@@ -28,4 +28,4 @@ PYTHON=$(find_python) || {
     exit 1
 }
 
-exec "$PYTHON" "$REPO_DIR/setup.py" "$@"
+exec "$PYTHON" "$REPO_DIR/cli.py" "$@"

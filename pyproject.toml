@@ -4,8 +4,18 @@ version = "1.0.0"
 description = "GitHub Copilot CLI configuration engine — discovers, merges, and deploys config from multiple sources"
 requires-python = ">=3.10"
 
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["copilot_setup*", "lib*"]
+
+[tool.setuptools]
+py-modules = ["cli"]
+
 [project.scripts]
-copilot-setup = "setup:main"
+copilot-setup = "cli:main"
 
 [tool.ruff]
 line-length = 120

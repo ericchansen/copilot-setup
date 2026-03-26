@@ -39,6 +39,6 @@ if (-not $Python) {
     exit 1
 }
 
-$setupArgs = @("$RepoDir\setup.py") + ($PassThrough ?? @())
+$setupArgs = @("$RepoDir\cli.py") + ($PassThrough ?? @())
 & $Python @setupArgs
 exit $LASTEXITCODE
