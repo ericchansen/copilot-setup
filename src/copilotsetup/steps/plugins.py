@@ -26,12 +26,18 @@ class PluginsStep:
         all_plugins = merged.plugins if merged else {}
         local_paths = merged.local_paths if merged else {}
 
-        # Show where plugins are defined
+        # Show where plugins are defined (respecting first-wins merge semantics)
         if all_plugins and merged:
+            seen_plugins: set[str] = set()
             for source in getattr(merged, "sources", []):
-                if source.plugins:
-                    names = ", ".join(sorted(source.plugins))
-                    result.item(f"[{source.name}]", "info", f"plugins: {names} (from {source.path})")
+                if not getattr(source, "plugins", None):
+                    continue
+                effective = sorted(name for name in source.plugins if name in all_plugins and name not in seen_plugins)
+                if not effective:
+                    continue
+                seen_plugins.update(effective)
+                names = ", ".join(effective)
+                result.item(f"[{source.name}]", "info", f"plugins: {names} (from {source.path})")
 
         if not all_plugins:
             result.item("Plugins", "info", "no plugins defined")
