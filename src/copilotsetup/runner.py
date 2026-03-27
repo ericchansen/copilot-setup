@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from copilot_setup.models import SetupContext, StepResult, Summary
+from copilotsetup.models import SetupContext, StepResult, Summary
 
 # ---------------------------------------------------------------------------
 # Step protocol — every step must implement this

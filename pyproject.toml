@@ -1,6 +1,6 @@
 [project]
 name = "copilot-setup"
-version = "1.0.0"
+version = "0.1.0"
 description = "GitHub Copilot CLI configuration engine — discovers, merges, and deploys config from multiple sources"
 requires-python = ">=3.10"
 
@@ -9,13 +9,11 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["copilot_setup*", "lib*"]
-
-[tool.setuptools]
-py-modules = ["cli"]
+where = ["src"]
+include = ["copilotsetup*"]
 
 [project.scripts]
-copilot-setup = "cli:main"
+copilot-setup = "copilotsetup.cli:main"
 
 [tool.ruff]
 line-length = 120
@@ -61,8 +59,7 @@ ignore = [
 "tests/**" = ["B011"]  # assert True OK in tests
 
 [tool.ruff.lint.isort]
-known-first-party = ["lib", "copilot_setup"]
+known-first-party = ["copilotsetup"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]

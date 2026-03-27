@@ -6,8 +6,8 @@ import os
 import re
 from pathlib import Path
 
-from copilot_setup.models import SetupContext, StepResult
-from lib.platform_ops import IS_WINDOWS
+from copilotsetup.models import SetupContext, StepResult
+from copilotsetup.platform_ops import IS_WINDOWS
 
 # Marker comments so we can detect and update our managed blocks
 _BLOCK_START = "# >>> copilot-config managed: {alias} >>>"

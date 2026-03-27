@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from lib.platform_ops import ensure_dir
+from copilotsetup.models import SetupContext, StepResult
+from copilotsetup.platform_ops import ensure_dir
 
 
 class DirectoriesStep:

@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from lib.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link, remove_link
+from copilotsetup.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link, remove_link
 
 # ---------------------------------------------------------------------------
 # Path helpers

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from lib.sources import ConfigSource, load_source, merge_sources
+from copilotsetup.sources import ConfigSource, load_source, merge_sources
 
 
 def _write_json(path: Path, data: object) -> None:

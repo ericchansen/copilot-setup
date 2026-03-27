@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from copilot_setup.ui_shim import UIShim
-from lib.skills import update_plugins
+from copilotsetup.models import SetupContext, StepResult, UIShim
+from copilotsetup.skills import update_plugins
 
 
 class PluginUpdateStep:

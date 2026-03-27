@@ -6,8 +6,9 @@ import json
 import subprocess
 from pathlib import Path
 
-from copilot_setup.models import SetupContext, StepResult
-from lib.build_detect import detect_build_commands
+from copilotsetup.build_detect import detect_build_commands
+from copilotsetup.config import json_load_safe
+from copilotsetup.models import SetupContext, StepResult
 
 
 class McpBuildStep:
@@ -35,10 +36,7 @@ class McpBuildStep:
 
         # Load stored paths from previous runs
         mcp_paths_file = ctx.copilot_home / ".mcp-paths.json"
-        try:
-            mcp_paths: dict = json.loads(mcp_paths_file.read_text("utf-8")) if mcp_paths_file.exists() else {}
-        except json.JSONDecodeError:
-            mcp_paths = {}
+        mcp_paths: dict = json_load_safe(mcp_paths_file)
 
         failed_names: list[str] = []
         any_buildable = False

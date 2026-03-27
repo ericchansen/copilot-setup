@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from copilot_setup.runner import Step, run_steps
+from copilotsetup.models import SetupContext, StepResult
+from copilotsetup.runner import Step, run_steps
 
 
 class FakeUI:

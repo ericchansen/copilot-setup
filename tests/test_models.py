@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import ItemResult, StepResult, Summary
+from copilotsetup.models import ItemResult, StepResult, Summary
 
 
 class TestItemResult:

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from copilot_setup.ui_shim import UIShim
-from lib.backup import backup_copilot_home
+from copilotsetup.backup import backup_copilot_home
+from copilotsetup.models import SetupContext, StepResult, UIShim
 
 
 class BackupStep:

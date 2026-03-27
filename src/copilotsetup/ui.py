@@ -114,7 +114,7 @@ class UI:
             if len(group) == 1:
                 self._render_item_dim(group[0][0], group[0][2])
             else:
-                print(f"    {GRAY}ℹ  {len(group)} {label}{RESET}")
+                print(f"    {GRAY}ℹ {RESET} {len(group)} {label}")
 
         # Show failed/warn/skipped individually (never collapse)
         for name, status, detail in alerts:
@@ -149,15 +149,12 @@ class UI:
     def _render_item(self, name: str, status: str, detail: str) -> None:
         icon = self._ICONS.get(status, "?")
         suffix = f" — {detail}" if detail else ""
-        if status in ("exists", "info"):
-            print(f"    {icon}{GRAY}{name}{suffix}{RESET}")
-        else:
-            print(f"    {icon}{name}{suffix}")
+        print(f"    {icon}{name}{suffix}")
 
     @staticmethod
     def _render_item_dim(name: str, detail: str) -> None:
         suffix = f" — {detail}" if detail else ""
-        print(f"    {GRAY}ℹ  {name}{suffix}{RESET}")
+        print(f"    {GRAY}ℹ {RESET} {name}{suffix}")
 
     # ── Immediate output (not buffered) ─────────────────────────────────────
 
@@ -168,8 +165,8 @@ class UI:
 
         formats = {
             "success": f"    {GREEN}✓{RESET} {msg}",
-            "info": f"    {GRAY}ℹ  {msg}{RESET}",
-            "warn": f"    {YELLOW}⚠  {msg}{RESET}",
+            "info": f"    {GRAY}ℹ {RESET} {msg}",
+            "warn": f"    {YELLOW}⚠ {RESET} {msg}",
             "err": f"    {RED}✗{RESET} {msg}",
         }
         print(formats.get(status, f"    {msg}"))

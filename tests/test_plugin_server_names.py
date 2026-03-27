@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import patch
 
-from copilot_setup.models import SetupContext
-from copilot_setup.steps.plugins import PluginsStep
+from copilotsetup.models import SetupContext
+from copilotsetup.steps.plugins import PluginsStep
 
 # Standard mcp.json entry for the server
 _MSX_SERVER_ENTRY = {"command": "node", "args": ["dist/index.js"]}
@@ -57,7 +57,7 @@ def _make_ctx(tmp_path: Path, servers: dict[str, dict] | None = None,
 def test_empty_when_copilot_cli_missing(tmp_path: Path):
     """copilot not on PATH, no local clone → empty set."""
     ctx = _make_ctx(tmp_path)
-    with patch("lib.skills.shutil.which", return_value=None), patch("copilot_setup.steps.plugins.link_local_plugins"):
+    with patch("copilotsetup.skills.shutil.which", return_value=None), patch("copilotsetup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == set()
 
@@ -71,7 +71,7 @@ def test_empty_when_install_fails(tmp_path: Path):
             return ""
         return None  # install fails
 
-    with patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"), patch("lib.skills._run_copilot", side_effect=_fake), patch("copilot_setup.steps.plugins.link_local_plugins"):
+    with patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"), patch("copilotsetup.skills._run_copilot", side_effect=_fake), patch("copilotsetup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == set()
 
@@ -85,7 +85,7 @@ def test_present_when_already_installed(tmp_path: Path):
             return "msx-mcp    mcaps-microsoft/MSX-MCP    1.0.0"
         return "ok"
 
-    with patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"), patch("lib.skills._run_copilot", side_effect=_fake), patch("copilot_setup.steps.plugins.link_local_plugins"):
+    with patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"), patch("copilotsetup.skills._run_copilot", side_effect=_fake), patch("copilotsetup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
 
@@ -99,7 +99,7 @@ def test_present_when_fresh_install_succeeds(tmp_path: Path):
             return ""
         return "installed"
 
-    with patch("lib.skills.shutil.which", return_value="/usr/bin/copilot"), patch("lib.skills._run_copilot", side_effect=_fake), patch("copilot_setup.steps.plugins.link_local_plugins"):
+    with patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"), patch("copilotsetup.skills._run_copilot", side_effect=_fake), patch("copilotsetup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
 
@@ -112,7 +112,7 @@ def test_present_when_local_clone_exists(tmp_path: Path):
 
     ctx = _make_ctx(tmp_path, local_paths={"msx-mcp": str(clone)})
 
-    with patch("lib.skills.shutil.which", return_value=None), patch("copilot_setup.steps.plugins.link_local_plugins"):
+    with patch("copilotsetup.skills.shutil.which", return_value=None), patch("copilotsetup.steps.plugins.link_local_plugins"):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
     assert "msx-mcp" in ctx.local_clone_map
