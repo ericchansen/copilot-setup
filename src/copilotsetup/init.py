@@ -86,9 +86,7 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
 
     if source_path.is_dir():
         copilot_dir = source_path / _COPILOT_DIR
-        if not copilot_dir.exists() and ui.confirm(
-            "Scaffold .copilot/ directory with starter files?", default=True
-        ):
+        if not copilot_dir.exists() and ui.confirm("Scaffold .copilot/ directory with starter files?", default=True):
             scaffolded = _scaffold_source(copilot_dir)
 
     # ── Write config-sources.json ────────────────────────────────────────

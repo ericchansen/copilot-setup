@@ -35,6 +35,11 @@ When editing:
 ```bash
 python -m pytest tests/ -v
 python -m ruff check .
+python -m ruff format --check .
 ```
+
+**CI runs both `ruff check` AND `ruff format --check`.** You MUST run both locally
+before committing. `ruff check` catches lint errors; `ruff format --check` catches
+formatting violations. Fix formatting with `python -m ruff format .`
 
 All tests are self-contained with fixture data. No tests depend on external files.
