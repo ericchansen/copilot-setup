@@ -46,7 +46,13 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
                 "info",
             )
             for src in existing:
-                ui.print_msg(f"  {src['name']}: {src['path']}", "info")
+                if not isinstance(src, dict):
+                    continue
+                name = src.get("name")
+                path = src.get("path")
+                if name is None or path is None:
+                    continue
+                ui.print_msg(f"  {name}: {path}", "info")
             if non_interactive:
                 return False
             if not ui.confirm("Add another config source?"):
@@ -90,11 +96,12 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
             scaffolded = _scaffold_source(copilot_dir)
 
     # ── Write config-sources.json ────────────────────────────────────────
-    _register_source(sf, name, raw_path)
+    resolved_path = str(source_path)
+    _register_source(sf, name, resolved_path)
 
     # ── Report what happened ─────────────────────────────────────────────
     print()
-    ui.print_msg(f"Registered source '{name}' → {raw_path}", "success")
+    ui.print_msg(f"Registered source '{name}' → {resolved_path}", "success")
     if created_dir:
         ui.print_msg(f"Created directory {source_path}", "success")
     if scaffolded:
@@ -116,7 +123,10 @@ def _load_existing(sf: Path) -> list[dict]:
     try:
         data = json.loads(sf.read_text("utf-8"))
         return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
+        print(f"  ⚠ {sf} contains invalid JSON — starting fresh.")
+        return []
+    except OSError:
         return []
 
 

@@ -167,7 +167,8 @@ def load_source(source: ConfigSource) -> ConfigSource:
     if plugins_file:
         try:
             plugins_data = json.loads(plugins_file.read_text("utf-8"))
-            source.plugins = plugins_data.get("plugins", {})
+            plugins_value = plugins_data.get("plugins", {})
+            source.plugins = plugins_value if isinstance(plugins_value, dict) else {}
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", plugins_file, exc)
 
@@ -178,9 +179,11 @@ def load_source(source: ConfigSource) -> ConfigSource:
             local_data = json.loads(local_file.read_text("utf-8"))
             source.local_paths = local_data.get("paths", {})
             # local.json plugins merge into (but don't replace) plugins.json
-            for name, info in local_data.get("plugins", {}).items():
-                if name not in source.plugins:
-                    source.plugins[name] = info
+            plugins_value = local_data.get("plugins")
+            if isinstance(plugins_value, dict):
+                for name, info in plugins_value.items():
+                    if name not in source.plugins:
+                        source.plugins[name] = info
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", local_file, exc)
 
