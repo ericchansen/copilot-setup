@@ -211,6 +211,6 @@ def run_restore(ui, repo_root: Path, non_interactive: bool = False) -> None:
     if removed:
         ui.print_msg(f"Removed {len(removed)} symlink(s)/junction(s):", "info")
         for r in removed:
-            ui.print_msg(f"  • {r}", "dim")
+            ui.print_msg(f"  • {r}", "info")
     else:
         ui.print_msg("No symlinks/junctions were removed", "info")

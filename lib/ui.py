@@ -114,7 +114,7 @@ class UI:
             if len(group) == 1:
                 self._render_item_dim(group[0][0], group[0][2])
             else:
-                print(f"    {GRAY}ℹ\ufe0e {len(group)} {label}{RESET}")
+                print(f"    {GRAY}ℹ  {len(group)} {label}{RESET}")
 
         # Show failed/warn/skipped individually (never collapse)
         for name, status, detail in alerts:
@@ -138,22 +138,26 @@ class UI:
     _ICONS: ClassVar[dict[str, str]] = {
         "created": f"{GREEN}✓{RESET}",
         "success": f"{GREEN}✓{RESET}",
-        "exists": f"{GRAY}ℹ\ufe0e{RESET}",
-        "info": f"{CYAN}ℹ\ufe0e{RESET}",
+        "updated": f"{GREEN}✓{RESET}",
+        "exists": f"{GRAY}ℹ {RESET}",
+        "info": f"{GRAY}ℹ {RESET}",
         "failed": f"{RED}✗{RESET}",
-        "warn": f"{YELLOW}⚠\ufe0e{RESET}",
-        "skipped": f"{YELLOW}⚠\ufe0e{RESET}",
+        "warn": f"{YELLOW}⚠ {RESET}",
+        "skipped": f"{YELLOW}⚠ {RESET}",
     }
 
     def _render_item(self, name: str, status: str, detail: str) -> None:
         icon = self._ICONS.get(status, "?")
         suffix = f" — {detail}" if detail else ""
-        print(f"    {icon} {name}{suffix}")
+        if status in ("exists", "info"):
+            print(f"    {icon}{GRAY}{name}{suffix}{RESET}")
+        else:
+            print(f"    {icon}{name}{suffix}")
 
     @staticmethod
     def _render_item_dim(name: str, detail: str) -> None:
         suffix = f" — {detail}" if detail else ""
-        print(f"    {GRAY}ℹ\ufe0e {name}{suffix}{RESET}")
+        print(f"    {GRAY}ℹ  {name}{suffix}{RESET}")
 
     # ── Immediate output (not buffered) ─────────────────────────────────────
 
@@ -164,10 +168,9 @@ class UI:
 
         formats = {
             "success": f"    {GREEN}✓{RESET} {msg}",
-            "info": f"    {CYAN}ℹ\ufe0e{RESET} {msg}",
-            "warn": f"    {YELLOW}⚠\ufe0e{RESET} {msg}",
+            "info": f"    {GRAY}ℹ  {msg}{RESET}",
+            "warn": f"    {YELLOW}⚠  {msg}{RESET}",
             "err": f"    {RED}✗{RESET} {msg}",
-            "dim": f"    {GRAY}{msg}{RESET}",
         }
         print(formats.get(status, f"    {msg}"))
 

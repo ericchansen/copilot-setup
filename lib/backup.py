@@ -174,7 +174,7 @@ def onedrive_backup(ui, skip_session: bool = False) -> dict:
             today = datetime.now().strftime("%Y-%m-%d")
             dated_name = f"session-store-{today}.db"
             size = _format_size(session_db.stat().st_size)
-            ui.print_msg(f"Copying session-store.db ({size})...", "dim")
+            ui.print_msg(f"Copying session-store.db ({size})...", "info")
 
             shutil.copy2(session_db, snap_dir / dated_name)
             shutil.copy2(session_db, snap_dir / "session-store-latest.db")

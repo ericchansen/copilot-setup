@@ -276,7 +276,20 @@ def link_local_plugins(
             config_dirty = True
             ui.item(name, "created", f"registered as plugin (v{version})")
         else:
-            ui.item(name, "exists", "already registered in config.json")
+            # Update version and cache_path if they've changed
+            for entry in registered:
+                if entry["name"] == name:
+                    if entry.get("version") != version:
+                        entry["version"] = version
+                        config_dirty = True
+                        ui.item(name, "updated", f"version → v{version}")
+                    elif str(entry.get("cache_path", "")) != str(junction_path):
+                        entry["cache_path"] = str(junction_path)
+                        config_dirty = True
+                        ui.item(name, "updated", f"cache_path → {junction_path}")
+                    else:
+                        ui.item(name, "exists", f"registered (v{version})")
+                    break
 
     if config_dirty:
         config_obj["installed_plugins"] = registered
@@ -524,5 +537,5 @@ def sync_untracked_skills(
     ui.print_msg(f"Adopted: {adopted}, Skipped: {skipped}", "info")
     if adopted > 0:
         ui.print_msg("Next steps:", "info")
-        ui.print_msg('  git add -A && git commit -m "feat: adopt new skills"', "dim")
-        ui.print_msg("  git push", "dim")
+        ui.print_msg('  git add -A && git commit -m "feat: adopt new skills"', "info")
+        ui.print_msg("  git push", "info")
