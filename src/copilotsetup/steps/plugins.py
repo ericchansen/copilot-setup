@@ -43,17 +43,16 @@ class PluginsStep:
             result.item("Plugins", "info", "no plugins defined")
             return result
 
-        # Install plugins whose linked server is in enabled_servers OR that have an alias
-        # (aliased plugins are loaded on-demand, not via default config)
-        enabled = getattr(ctx, "enabled_servers", {})
+        # Install all declared plugins. Previously this was gated on enabled_servers,
+        # but plugins.json is an explicit declaration — install them all.
         plugins_to_install = [
             {"name": name, "source": info.get("source", ""), "localServerName": name, "alias": info.get("alias", "")}
             for name, info in all_plugins.items()
-            if name in enabled or info.get("alias")
+            if info.get("source")
         ]
 
         if not plugins_to_install:
-            result.item("Plugins", "info", "no plugins needed for enabled servers")
+            result.item("Plugins", "info", "no plugin sources defined")
             return result
 
         # Resolve local clones using local_paths from local.json

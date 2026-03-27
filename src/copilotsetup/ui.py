@@ -120,7 +120,7 @@ class UI:
             if len(group) == 1:
                 self._render_item_dim(group[0][0], group[0][2])
             else:
-                print(f"    {GRAY}ℹ {RESET} {len(group)} {label}")
+                print(f"    {GRAY}ℹ {RESET}{len(group)} {label}")
 
         # Show failed/warn/skipped individually (never collapse)
         for name, status, detail in alerts:
@@ -160,7 +160,7 @@ class UI:
     @staticmethod
     def _render_item_dim(name: str, detail: str) -> None:
         suffix = f" — {detail}" if detail else ""
-        print(f"    {GRAY}ℹ {RESET} {name}{suffix}")
+        print(f"    {GRAY}ℹ {RESET}{name}{suffix}")
 
     # ── Immediate output (not buffered) ─────────────────────────────────────
 

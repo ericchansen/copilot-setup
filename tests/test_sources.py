@@ -97,6 +97,58 @@ class TestLoadSource:
         assert source.servers == {}
         assert source.instructions is None
 
+    def test_loads_plugins_from_plugins_json(self, tmp_path: Path):
+        """Committed plugins.json defines plugins to install."""
+        src_dir = tmp_path / "work"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(
+            copilot / "plugins.json",
+            {"plugins": {"msx-mcp": {"source": "mcaps-microsoft/MSX-MCP"}}},
+        )
+
+        source = ConfigSource(name="work", path=src_dir)
+        load_source(source)
+
+        assert "msx-mcp" in source.plugins
+        assert source.plugins["msx-mcp"]["source"] == "mcaps-microsoft/MSX-MCP"
+
+    def test_local_json_merges_into_plugins_json(self, tmp_path: Path):
+        """local.json plugins merge with (not replace) plugins.json."""
+        src_dir = tmp_path / "work"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(
+            copilot / "plugins.json",
+            {"plugins": {"msx-mcp": {"source": "mcaps-microsoft/MSX-MCP"}}},
+        )
+        _write_json(
+            copilot / "local.json",
+            {"plugins": {"my-local": {"source": "me/my-plugin"}}, "paths": {"msx-mcp": "~/repos/msx-mcp"}},
+        )
+
+        source = ConfigSource(name="work", path=src_dir)
+        load_source(source)
+
+        assert "msx-mcp" in source.plugins
+        assert "my-local" in source.plugins
+        assert source.local_paths.get("msx-mcp") == "~/repos/msx-mcp"
+
+    def test_local_json_plugins_without_plugins_json(self, tmp_path: Path):
+        """local.json plugins still work when no plugins.json exists (backward compat)."""
+        src_dir = tmp_path / "legacy"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(
+            copilot / "local.json",
+            {"plugins": {"my-plugin": {"source": "me/my-plugin"}}},
+        )
+
+        source = ConfigSource(name="legacy", path=src_dir)
+        load_source(source)
+
+        assert "my-plugin" in source.plugins
+
 
 class TestMergeSources:
     def test_additive_servers(self, tmp_path: Path):
@@ -163,3 +215,24 @@ class TestMergeSources:
         assert merged.servers == {}
         assert merged.skill_dirs == []
         assert merged.instructions is None
+
+    def test_additive_plugins(self, tmp_path: Path):
+        s1 = ConfigSource(name="a", path=tmp_path)
+        s1.plugins = {"plug-a": {"source": "owner/a"}}
+        s2 = ConfigSource(name="b", path=tmp_path)
+        s2.plugins = {"plug-b": {"source": "owner/b"}}
+
+        merged = merge_sources([s1, s2])
+        assert len(merged.plugins) == 2
+        assert "plug-a" in merged.plugins
+        assert "plug-b" in merged.plugins
+
+    def test_deduplicates_plugins(self, tmp_path: Path):
+        s1 = ConfigSource(name="a", path=tmp_path)
+        s1.plugins = {"dup": {"source": "owner/first"}}
+        s2 = ConfigSource(name="b", path=tmp_path)
+        s2.plugins = {"dup": {"source": "owner/second"}}
+
+        merged = merge_sources([s1, s2])
+        assert len(merged.plugins) == 1
+        assert merged.plugins["dup"]["source"] == "owner/first"
