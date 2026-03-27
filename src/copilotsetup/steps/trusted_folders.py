@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from copilot_setup.models import SetupContext, StepResult
+from copilotsetup.config import json_load_safe
+from copilotsetup.models import SetupContext, StepResult
 
 
 class TrustedFoldersStep:
@@ -19,11 +20,9 @@ class TrustedFoldersStep:
     def run(self, ctx: SetupContext) -> StepResult:
         result = StepResult()
 
-        try:
-            config_obj = json.loads(ctx.config_json.read_text("utf-8")) if ctx.config_json.exists() else {}
-        except json.JSONDecodeError:
+        config_obj = json_load_safe(ctx.config_json)
+        if not config_obj and ctx.config_json.exists():
             result.item("config.json", "warn", "invalid JSON — treating as empty")
-            config_obj = {}
 
         trusted: list[str] = config_obj.get("trusted_folders", [])
         resolved_root = str(ctx.repo_root.resolve())

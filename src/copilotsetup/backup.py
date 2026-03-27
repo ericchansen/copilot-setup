@@ -7,7 +7,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from lib.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link
+from copilotsetup.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link
 
 _CONFIG_FILES = [
     "config.json",

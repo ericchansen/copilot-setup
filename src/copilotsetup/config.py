@@ -6,7 +6,17 @@ import json
 import shutil
 from pathlib import Path
 
-from lib.platform_ops import is_link, validate_lsp_binary
+from copilotsetup.platform_ops import is_link, validate_lsp_binary
+
+
+def json_load_safe(path: Path) -> dict:
+    """Load JSON from *path*, returning {} on missing file or parse error."""
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except json.JSONDecodeError:
+        return {}
 
 
 def patch_config_json(
@@ -18,10 +28,7 @@ def patch_config_json(
     if not portable_path.exists():
         return False
 
-    try:
-        config = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
-    except json.JSONDecodeError:
-        config = {}
+    config = json_load_safe(config_path)
 
     try:
         portable = json.loads(portable_path.read_text("utf-8"))

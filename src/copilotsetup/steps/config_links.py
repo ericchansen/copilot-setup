@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from copilot_setup.models import SetupContext, StepResult
-from lib.platform_ops import create_file_link
+from copilotsetup.models import SetupContext, StepResult
+from copilotsetup.platform_ops import create_file_link
 
 
 class ConfigLinksStep:

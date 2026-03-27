@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from copilot_setup.models import SetupContext
+from copilotsetup.models import SetupContext
 
 
 @pytest.fixture

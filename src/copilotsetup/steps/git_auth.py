@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from copilot_setup.ui_shim import UIShim
-from lib.git_helpers import detect_git_auth
+from copilotsetup.git_helpers import detect_git_auth
+from copilotsetup.models import SetupContext, StepResult, UIShim
 
 
 class GitAuthStep:

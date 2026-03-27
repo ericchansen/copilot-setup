@@ -28,10 +28,10 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
 REPO_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from lib.optional_deps import run_optional_deps
-from lib.platform_ops import home_dir
-from lib.sources import discover_sources, load_source, merge_sources
-from lib.ui import UI
+from copilotsetup.optional_deps import run_optional_deps
+from copilotsetup.platform_ops import home_dir
+from copilotsetup.sources import discover_sources, load_source, merge_sources
+from copilotsetup.ui import UI
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -77,7 +77,7 @@ def main() -> None:
     cmd = args.command or "setup"
 
     if cmd == "backup":
-        from lib.backup import onedrive_backup
+        from copilotsetup.backup import onedrive_backup
 
         ui = UI(["Backup · Config Files", "Backup · Session Store"])
         ui.header("💾  Copilot Config Backup")
@@ -85,7 +85,7 @@ def main() -> None:
         return
 
     if cmd == "restore":
-        from lib.restore import run_restore
+        from copilotsetup.restore import run_restore
 
         ui = UI(["Scan Symlinks", "Restore from Backup"])
         ui.header("🔄  Copilot Config Restore")
@@ -93,7 +93,7 @@ def main() -> None:
         return
 
     if cmd == "sync-skills":
-        from lib.skills import sync_untracked_skills
+        from copilotsetup.skills import sync_untracked_skills
 
         copilot_skills = home_dir() / ".copilot" / "skills"
         # Discover all skill dirs from registered sources
@@ -116,9 +116,9 @@ def main() -> None:
 
 def _run_setup(args: argparse.Namespace) -> None:
     """Run the full setup flow using the step-based architecture."""
-    from copilot_setup.models import SetupContext
-    from copilot_setup.runner import run_steps
-    from copilot_setup.steps import ALL_STEPS
+    from copilotsetup.models import SetupContext
+    from copilotsetup.runner import run_steps
+    from copilotsetup.steps import ALL_STEPS
 
     # Discover and load config sources
     raw_sources = discover_sources()

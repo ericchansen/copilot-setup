@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from lib.config import patch_config_json
+from copilotsetup.config import patch_config_json
+from copilotsetup.models import SetupContext, StepResult
 
 # Keys allowed to be copied from config.portable.json → config.json
 PORTABLE_ALLOWED_KEYS = [

@@ -8,7 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from lib.platform_ops import create_dir_link, get_link_target, is_link, remove_link
+from copilotsetup.config import json_load_safe
+from copilotsetup.platform_ops import create_dir_link, get_link_target, is_link, remove_link
 
 # Legacy keys to strip from .external-paths.json during cleanup
 _EXTERNAL_PATHS_LEGACY_KEYS = ("anthropic", "github", "msx-mcp", "spt-iq")
@@ -210,10 +211,7 @@ def link_local_plugins(
     installed_plugins_dir.mkdir(parents=True, exist_ok=True)
 
     # Read config.json once
-    try:
-        config_obj = json.loads(config_json_path.read_text("utf-8")) if config_json_path.exists() else {}
-    except (json.JSONDecodeError, OSError):
-        config_obj = {}
+    config_obj = json_load_safe(config_json_path)
     registered: list[dict] = config_obj.get("installed_plugins", [])
     if not isinstance(registered, list):
         registered = []

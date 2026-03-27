@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from copilot_setup.models import SetupContext, StepResult
-from copilot_setup.ui_shim import UIShim
-from lib.skills import install_plugins, link_local_plugins
+from copilotsetup.models import SetupContext, StepResult, UIShim
+from copilotsetup.skills import install_plugins, link_local_plugins
 
 
 class PluginsStep:

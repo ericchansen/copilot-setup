@@ -32,7 +32,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lib.platform_ops import home_dir
+from copilotsetup.platform_ops import home_dir
 
 logger = logging.getLogger(__name__)
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from copilot_setup.models import SetupContext, StepResult
-from lib.config import generate_mcp_config
+from copilotsetup.config import generate_mcp_config
+from copilotsetup.models import SetupContext, StepResult
 
 
 class McpConfigStep:
