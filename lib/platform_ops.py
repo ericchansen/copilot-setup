@@ -128,7 +128,11 @@ def create_dir_link(
 
     # --- real directory exists ---
     elif link_path.is_dir():
-        if interactive:
+        is_empty = not any(link_path.iterdir())
+        if is_empty:
+            # Empty real dir is safe to replace silently
+            pass
+        elif interactive:
             answer = input(f"{link_path} is a real directory. Replace with junction/symlink? [y/N] ")
             if answer.strip().lower() != "y":
                 return "skipped"

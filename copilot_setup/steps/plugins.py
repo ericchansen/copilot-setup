@@ -31,12 +31,13 @@ class PluginsStep:
             result.item("Plugins", "info", "no plugins defined")
             return result
 
-        # Only install plugins whose linked server is in enabled_servers
+        # Install plugins whose linked server is in enabled_servers OR that have an alias
+        # (aliased plugins are loaded on-demand, not via default config)
         enabled = getattr(ctx, "enabled_servers", {})
         plugins_to_install = [
             {"name": name, "source": info.get("source", ""), "localServerName": name, "alias": info.get("alias", "")}
             for name, info in all_plugins.items()
-            if name in enabled
+            if name in enabled or info.get("alias")
         ]
 
         if not plugins_to_install:

@@ -58,8 +58,8 @@ def _validate_lsp(command: str, args: list[str]) -> bool:
 def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: dict) -> None:
     """Interactive optional dependency installs."""
     ui.section("Optional Dependencies")
-    ui.print_msg("These tools enhance specific skills. Install now or later.", "dim")
-    ui.print_msg("The agent works without them but some skills will be limited.", "dim")
+    ui.print_msg("These tools enhance specific skills. Install now or later.", "info")
+    ui.print_msg("The agent works without them but some skills will be limited.", "info")
 
     lsp_installed_any = False
 

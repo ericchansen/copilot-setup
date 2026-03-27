@@ -90,14 +90,34 @@ _BASH_DEV_TEMPLATE = """\
 
 
 def _profile_path_ps() -> Path | None:
-    """Return the PowerShell profile path (CurrentUserCurrentHost)."""
+    """Return the PowerShell profile path (CurrentUserCurrentHost).
+
+    Handles OneDrive Known Folder Move by checking the shell folder registry
+    key for the real Documents path, then falling back to ``USERPROFILE/Documents``.
+    """
+    import winreg
+
     raw = os.environ.get("USERPROFILE")
     if not raw:
         return None
-    # PowerShell 7+ (pwsh) profile location
-    ps7 = Path(raw) / "Documents" / "PowerShell" / "Microsoft.PowerShell_profile.ps1"
-    # Windows PowerShell 5.x profile location
-    ps5 = Path(raw) / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+
+    # Try registry for the real Documents path (handles OneDrive redirection)
+    docs = None
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+        ) as key:
+            val, _ = winreg.QueryValueEx(key, "Personal")
+            docs = Path(os.path.expandvars(val))
+    except OSError:
+        pass
+
+    if not docs or not docs.is_dir():
+        docs = Path(raw) / "Documents"
+
+    ps7 = docs / "PowerShell" / "Microsoft.PowerShell_profile.ps1"
+    ps5 = docs / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
     # Prefer whichever already exists; default to PS7
     if ps5.exists() and not ps7.exists():
         return ps5
