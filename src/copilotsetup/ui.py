@@ -105,10 +105,16 @@ class UI:
             self._render_item(name, status, detail)
 
         # Collapse passive items — sub-group by actual status for labelling
+        # Source-attribution items (name starts with '[') always render individually
         exists_group = [i for i in passive if i[1] == "exists"]
-        info_group = [i for i in passive if i[1] == "info"]
+        info_source = [i for i in passive if i[1] == "info" and i[0].startswith("[")]
+        info_plain = [i for i in passive if i[1] == "info" and not i[0].startswith("[")]
 
-        for group, label in [(exists_group, "already linked"), (info_group, "info")]:
+        # Source-attribution info lines always shown individually
+        for name, _status, detail in info_source:
+            self._render_item_dim(name, detail)
+
+        for group, label in [(exists_group, "already linked"), (info_plain, "info")]:
             if not group:
                 continue
             if len(group) == 1:
@@ -136,12 +142,12 @@ class UI:
     # ── Item renderers ──────────────────────────────────────────────────────
 
     _ICONS: ClassVar[dict[str, str]] = {
-        "created": f"{GREEN}✓{RESET}",
-        "success": f"{GREEN}✓{RESET}",
-        "updated": f"{GREEN}✓{RESET}",
+        "created": f"{GREEN}✓ {RESET}",
+        "success": f"{GREEN}✓ {RESET}",
+        "updated": f"{GREEN}✓ {RESET}",
         "exists": f"{GRAY}ℹ {RESET}",
         "info": f"{GRAY}ℹ {RESET}",
-        "failed": f"{RED}✗{RESET}",
+        "failed": f"{RED}✗ {RESET}",
         "warn": f"{YELLOW}⚠ {RESET}",
         "skipped": f"{YELLOW}⚠ {RESET}",
     }
@@ -164,7 +170,7 @@ class UI:
             self._print_step_header()
 
         formats = {
-            "success": f"    {GREEN}✓{RESET} {msg}",
+            "success": f"    {GREEN}✓ {RESET} {msg}",
             "info": f"    {GRAY}ℹ {RESET} {msg}",
             "warn": f"    {YELLOW}⚠ {RESET} {msg}",
             "err": f"    {RED}✗{RESET} {msg}",

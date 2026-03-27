@@ -22,6 +22,15 @@ class McpConfigStep:
         config_servers = {
             name: entry for name, entry in ctx.enabled_servers.items() if name not in ctx.plugin_managed_names
         }
+
+        # Show per-source server attribution
+        merged = getattr(ctx, "merged_config", None)
+        if merged:
+            for source in getattr(merged, "sources", []):
+                if source.servers:
+                    names = ", ".join(sorted(source.servers))
+                    result.item(f"[{source.name}]", "info", f"servers: {names}")
+
         generate_mcp_config(config_servers, ctx.mcp_paths, ctx.external_dir, mcp_config_path)
 
         result.item("mcp-config.json", "success", f"{len(config_servers)} servers")

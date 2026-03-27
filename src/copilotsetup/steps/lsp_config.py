@@ -23,6 +23,11 @@ class LspConfigStep:
         merged = getattr(ctx, "merged_config", None)
         if merged and merged.lsp_servers and merged.lsp_servers_path:
             lsp_json_path = merged.lsp_servers_path
+            # Show which source provided LSP config
+            for source in getattr(merged, "sources", []):
+                if source.lsp_servers_path and source.lsp_servers_path == merged.lsp_servers_path:
+                    result.item(f"[{source.name}]", "info", f"LSP config from {source.path}")
+                    break
         else:
             lsp_json_path = ctx.lsp_servers_json
 

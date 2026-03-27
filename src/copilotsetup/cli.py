@@ -170,6 +170,27 @@ def _run_setup(args: argparse.Namespace) -> None:
     ui = UI(step_names)
     ui.header("📦  Copilot Config & Skills Setup")
 
+    # Print discovered sources summary
+    print(f"\n  {len(sources)} config source(s) loaded:")
+    for src in sources:
+        parts: list[str] = []
+        if src.servers:
+            parts.append(f"{len(src.servers)} servers")
+        if src.skill_dirs:
+            skill_count = sum(1 for d in src.skill_dirs for e in d.iterdir() if e.is_dir() and (e / "SKILL.md").exists()) if src.skill_dirs else 0
+            parts.append(f"{skill_count} skills")
+        if src.plugins:
+            parts.append(f"{len(src.plugins)} plugins")
+        if src.instructions:
+            parts.append("instructions")
+        if src.lsp_servers:
+            parts.append("LSP config")
+        if src.portable_config:
+            parts.append("portable config")
+        detail = f" ({', '.join(parts)})" if parts else ""
+        print(f"    · {src.name}: {src.path}{detail}")
+    print()
+
     # Run all steps
     summary = run_steps(ALL_STEPS, ctx, ui)
 
