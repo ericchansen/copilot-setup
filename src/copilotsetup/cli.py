@@ -58,6 +58,8 @@ def parse_args() -> argparse.Namespace:
     restore_p = sub.add_parser("restore", help="Remove setup symlinks, optionally restore from backup")
     restore_p.add_argument("--non-interactive", action="store_true", help="Skip restore prompts")
 
+    sub.add_parser("init", help="Register a config source and scaffold .copilot/ directory")
+
     sync_p = sub.add_parser("sync-skills", help="Adopt untracked skills from ~/.copilot/skills/")
     sync_p.add_argument("--non-interactive", action="store_true", help="Skip per-skill prompts")
 
@@ -92,6 +94,14 @@ def main() -> None:
         run_restore(ui, REPO_ROOT, non_interactive=args.non_interactive)
         return
 
+    if cmd == "init":
+        from copilotsetup.init import run_init
+
+        ui = UI(["Init"])
+        ui.header("🚀  Copilot Config Init")
+        run_init(ui, non_interactive=args.non_interactive)
+        return
+
     if cmd == "sync-skills":
         from copilotsetup.skills import sync_untracked_skills
 
@@ -123,10 +133,24 @@ def _run_setup(args: argparse.Namespace) -> None:
     # Discover and load config sources
     raw_sources = discover_sources()
     if not raw_sources:
-        print("⚠ No config sources registered in ~/.copilot/config-sources.json")
-        print("  Create the file with entries like:")
-        print('  [{"name": "personal", "path": "~/repos/copilot-config"}]')
-        return
+        if args.non_interactive:
+            print("⚠ No config sources registered in ~/.copilot/config-sources.json")
+            print("  Run `copilot-setup init` to get started.")
+            return
+
+        # Offer interactive init
+        from copilotsetup.init import run_init
+
+        ui = UI(["Init"])
+        ui.header("🚀  Copilot Config Init")
+        print("  No config sources registered yet. Let's set one up.\n")
+        if not run_init(ui):
+            return
+
+        # Re-discover after init
+        raw_sources = discover_sources()
+        if not raw_sources:
+            return
 
     sources = [load_source(s) for s in raw_sources]
     merged = merge_sources(sources)

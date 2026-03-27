@@ -5,7 +5,8 @@ A config source is a directory with a standard ``.copilot/`` layout::
     repo/
       .copilot/
         mcp.json                  ← standard mcpServers format
-        local.json                ← gitignored: local paths, plugins, aliases
+        plugins.json              ← plugins to install (committed, sharable)
+        local.json                ← gitignored: local paths, extra plugins, aliases
         copilot-instructions.md   ← global instructions
         config.portable.json      ← portable Copilot settings
         lsp-servers.json          ← LSP server definitions
@@ -41,6 +42,7 @@ SOURCES_FILE = "config-sources.json"
 # Standard .copilot/ directory layout
 _COPILOT_DIR = ".copilot"
 _MCP_JSON = "mcp.json"
+_PLUGINS_JSON = "plugins.json"
 _LOCAL_JSON = "local.json"
 _LSP_SERVERS = "lsp-servers.json"
 _PORTABLE_JSON = "config.portable.json"
@@ -160,13 +162,25 @@ def load_source(source: ConfigSource) -> ConfigSource:
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", mcp_file, exc)
 
+    # Plugins — .copilot/plugins.json (committed, sharable)
+    plugins_file = _find_file(source.path, _PLUGINS_JSON)
+    if plugins_file:
+        try:
+            plugins_data = json.loads(plugins_file.read_text("utf-8"))
+            source.plugins = plugins_data.get("plugins", {})
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to load %s: %s", plugins_file, exc)
+
     # Local overrides — .copilot/local.json (gitignored, engine-only)
     local_file = _find_file(source.path, _LOCAL_JSON)
     if local_file:
         try:
             local_data = json.loads(local_file.read_text("utf-8"))
             source.local_paths = local_data.get("paths", {})
-            source.plugins = local_data.get("plugins", {})
+            # local.json plugins merge into (but don't replace) plugins.json
+            for name, info in local_data.get("plugins", {}).items():
+                if name not in source.plugins:
+                    source.plugins[name] = info
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", local_file, exc)
 
