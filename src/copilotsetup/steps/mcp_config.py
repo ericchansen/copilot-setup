@@ -20,8 +20,7 @@ class McpConfigStep:
 
         # Exclude plugin-managed servers — their plugin .mcp.json provides the config
         config_servers = {
-            name: entry for name, entry in ctx.enabled_servers.items()
-            if name not in ctx.plugin_managed_names
+            name: entry for name, entry in ctx.enabled_servers.items() if name not in ctx.plugin_managed_names
         }
         generate_mcp_config(config_servers, ctx.mcp_paths, ctx.external_dir, mcp_config_path)
 

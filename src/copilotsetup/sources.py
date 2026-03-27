@@ -14,8 +14,8 @@ A config source is a directory with a standard ``.copilot/`` layout::
 Sources are registered in ``~/.copilot/config-sources.json``::
 
     [
-      {"name": "personal", "path": "C:/Users/you/repos/copilot-config"},
-      {"name": "work",     "path": "C:/Users/you/repos/copilot-config-work"}
+        {"name": "personal", "path": "C:/Users/you/repos/copilot-config"},
+        {"name": "work", "path": "C:/Users/you/repos/copilot-config-work"},
     ]
 
 Merge strategy:

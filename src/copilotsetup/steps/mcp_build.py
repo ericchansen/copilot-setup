@@ -30,8 +30,7 @@ class McpBuildStep:
         plugin_server_names = getattr(ctx, "plugin_server_names", set())
         local_clone_map: dict[str, Path] = getattr(ctx, "local_clone_map", {})
         ctx.plugin_managed_names = {
-            name for name in enabled
-            if name in plugin_server_names and name not in local_clone_map
+            name for name in enabled if name in plugin_server_names and name not in local_clone_map
         }
 
         # Load stored paths from previous runs

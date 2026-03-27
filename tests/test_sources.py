@@ -19,12 +19,15 @@ class TestLoadSource:
         src_dir = tmp_path / "personal"
         copilot = src_dir / ".copilot"
         copilot.mkdir(parents=True)
-        _write_json(copilot / "mcp.json", {
-            "mcpServers": {
-                "azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]},
-                "context7": {"url": "https://mcp.context7.com/mcp"},
-            }
-        })
+        _write_json(
+            copilot / "mcp.json",
+            {
+                "mcpServers": {
+                    "azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]},
+                    "context7": {"url": "https://mcp.context7.com/mcp"},
+                }
+            },
+        )
 
         source = ConfigSource(name="personal", path=src_dir)
         load_source(source)
