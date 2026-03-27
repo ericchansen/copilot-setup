@@ -177,7 +177,11 @@ def _run_setup(args: argparse.Namespace) -> None:
         if src.servers:
             parts.append(f"{len(src.servers)} servers")
         if src.skill_dirs:
-            skill_count = sum(1 for d in src.skill_dirs for e in d.iterdir() if e.is_dir() and (e / "SKILL.md").exists()) if src.skill_dirs else 0
+            skill_count = (
+                sum(1 for d in src.skill_dirs for e in d.iterdir() if e.is_dir() and (e / "SKILL.md").exists())
+                if src.skill_dirs
+                else 0
+            )
             parts.append(f"{skill_count} skills")
         if src.plugins:
             parts.append(f"{len(src.plugins)} plugins")
