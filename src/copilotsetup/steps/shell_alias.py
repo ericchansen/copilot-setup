@@ -196,10 +196,7 @@ class ShellAliasStep:
         if not merged:
             return result
 
-        alias_plugins = [
-            (name, info) for name, info in merged.plugins.items()
-            if info.get("alias")
-        ]
+        alias_plugins = [(name, info) for name, info in merged.plugins.items() if info.get("alias")]
         if not alias_plugins:
             return result
 

@@ -165,17 +165,22 @@ def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: d
             print()
             summary["optional_skipped"].append("rust-analyzer")
         else:
+
             def _install_rust_analyzer():
                 r = subprocess.run(
                     ["rustup", "component", "add", "rust-analyzer"],
-                    capture_output=True, text=True, shell=_SHELL,
+                    capture_output=True,
+                    text=True,
+                    shell=_SHELL,
                 )
                 return r.returncode == 0
 
             if _offer_install(
-                ui, "rust-analyzer",
+                ui,
+                "rust-analyzer",
                 ["rust-analyzer gives the agent code intelligence for Rust files."],
-                _install_rust_analyzer, summary,
+                _install_rust_analyzer,
+                summary,
             ):
                 lsp_installed_any = True
 
@@ -185,7 +190,8 @@ def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: d
         summary["optional_skipped"].append("markitdown")
     else:
         _offer_install(
-            ui, "MarkItDown",
+            ui,
+            "MarkItDown",
             [
                 "MarkItDown lets the agent read PDF, Word, Excel, and PowerPoint",
                 "files by converting them to markdown text.",
@@ -221,7 +227,8 @@ def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: d
             summary["optional_skipped"].append("qmd")
         else:
             _offer_install(
-                ui, "QMD",
+                ui,
+                "QMD",
                 [
                     "QMD (Query MarkDown) provides local hybrid search for the",
                     "agent's memory. Requires Node.js 22+.",
@@ -245,21 +252,28 @@ def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: d
         ui.print_msg("Playwright Edge driver already installed", "success")
         summary["optional_skipped"].append("playwright-edge")
     else:
+
         def _install_playwright_edge():
             r = subprocess.run(
                 ["npx", "playwright", "install", "msedge"],
-                capture_output=True, text=True, shell=_SHELL,
-                encoding="utf-8", errors="replace",
+                capture_output=True,
+                text=True,
+                shell=_SHELL,
+                encoding="utf-8",
+                errors="replace",
             )
             return r.returncode == 0
 
         _offer_install(
-            ui, "Playwright Edge driver",
+            ui,
+            "Playwright Edge driver",
             [
                 "Playwright lets the agent interact with web browsers — take",
                 "screenshots, click buttons, fill forms, and verify web apps.",
             ],
-            _install_playwright_edge, summary, default=False,
+            _install_playwright_edge,
+            summary,
+            default=False,
         )
 
     # ── Re-generate LSP config if any LSP servers installed ──────────────
