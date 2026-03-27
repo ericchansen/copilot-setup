@@ -23,12 +23,23 @@ class McpConfigStep:
             name: entry for name, entry in ctx.enabled_servers.items() if name not in ctx.plugin_managed_names
         }
 
-        # Show per-source server attribution
+        # Show per-source server attribution (first-wins, excluding plugin-managed)
         merged = getattr(ctx, "merged_config", None)
         if merged:
+            seen_servers: set[str] = set()
+            plugin_managed = set(getattr(ctx, "plugin_managed_names", set()))
             for source in getattr(merged, "sources", []):
-                if source.servers:
-                    names = ", ".join(sorted(source.servers))
+                source_servers = getattr(source, "servers", None)
+                if not source_servers:
+                    continue
+                contributing = []
+                for name in source_servers:
+                    if name in plugin_managed or name in seen_servers:
+                        continue
+                    contributing.append(name)
+                    seen_servers.add(name)
+                if contributing:
+                    names = ", ".join(sorted(contributing))
                     result.item(f"[{source.name}]", "info", f"servers: {names}")
 
         generate_mcp_config(config_servers, ctx.mcp_paths, ctx.external_dir, mcp_config_path)

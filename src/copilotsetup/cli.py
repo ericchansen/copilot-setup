@@ -30,6 +30,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from copilotsetup.optional_deps import run_optional_deps
 from copilotsetup.platform_ops import home_dir
+from copilotsetup.skills import get_skill_folders
 from copilotsetup.sources import discover_sources, load_source, merge_sources
 from copilotsetup.ui import UI
 
@@ -170,27 +171,41 @@ def _run_setup(args: argparse.Namespace) -> None:
     ui = UI(step_names)
     ui.header("📦  Copilot Config & Skills Setup")
 
-    # Print discovered sources summary
+    # Print discovered sources summary (respecting first-wins merge semantics)
     print(f"\n  {len(sources)} config source(s) loaded:")
+    seen_servers: set[str] = set()
+    seen_plugins: set[str] = set()
+    first_instructions = True
+    first_lsp = True
+    first_portable = True
     for src in sources:
         parts: list[str] = []
         if src.servers:
-            parts.append(f"{len(src.servers)} servers")
+            effective = [n for n in src.servers if n not in seen_servers]
+            seen_servers.update(effective)
+            if effective:
+                parts.append(f"{len(effective)} servers")
         if src.skill_dirs:
-            skill_count = (
-                sum(1 for d in src.skill_dirs for e in d.iterdir() if e.is_dir() and (e / "SKILL.md").exists())
-                if src.skill_dirs
-                else 0
-            )
-            parts.append(f"{skill_count} skills")
+            try:
+                skill_count = sum(len(get_skill_folders(d)) for d in src.skill_dirs)
+            except OSError:
+                skill_count = 0
+            if skill_count:
+                parts.append(f"{skill_count} skills")
         if src.plugins:
-            parts.append(f"{len(src.plugins)} plugins")
-        if src.instructions:
+            effective_p = [n for n in src.plugins if n not in seen_plugins]
+            seen_plugins.update(effective_p)
+            if effective_p:
+                parts.append(f"{len(effective_p)} plugins")
+        if src.instructions and first_instructions:
             parts.append("instructions")
-        if src.lsp_servers:
+            first_instructions = False
+        if src.lsp_servers and first_lsp:
             parts.append("LSP config")
-        if src.portable_config:
+            first_lsp = False
+        if src.portable_config and first_portable:
             parts.append("portable config")
+            first_portable = False
         detail = f" ({', '.join(parts)})" if parts else ""
         print(f"    · {src.name}: {src.path}{detail}")
     print()
