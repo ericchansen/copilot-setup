@@ -31,6 +31,13 @@ class ConfigPatchStep:
         merged = getattr(ctx, "merged_config", None)
         portable = merged.portable_config if merged else ctx.portable_json
 
+        # Show which source provided portable config
+        if merged and merged.portable_config:
+            for source in getattr(merged, "sources", []):
+                if source.portable_config and source.portable_config == merged.portable_config:
+                    result.item(f"[{source.name}]", "info", f"portable config from {source.path}")
+                    break
+
         patched = patch_config_json(ctx.config_json, portable, PORTABLE_ALLOWED_KEYS)
         if patched:
             result.item("config.json", "success", "patched with portable settings")

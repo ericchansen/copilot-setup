@@ -34,8 +34,11 @@ class ConfigLinksStep:
             # Check merged instructions first, fall back to repo_copilot
             if source_name == "copilot-instructions.md" and merged and merged.instructions:
                 target_path = merged.instructions
+                # Find which source provided this
+                src_label = _find_source_label(target_path, getattr(merged, "sources", [])) if merged else ""
             else:
                 target_path = ctx.repo_copilot / source_name
+                src_label = ""
             link_path = ctx.copilot_home / cfg["name"]
 
             if not target_path.exists():
@@ -43,15 +46,27 @@ class ConfigLinksStep:
                 continue
 
             status = create_file_link(link_path, target_path, not ctx.non_interactive)
+            provenance = f" (from {src_label})" if src_label else ""
             if status == "created":
-                result.item(cfg["name"], "created", "linked")
+                result.item(cfg["name"], "created", f"linked → {target_path}{provenance}")
             elif status == "copied":
-                result.item(cfg["name"], "warn", "copied (symlinks need Developer Mode)")
+                result.item(cfg["name"], "warn", f"copied (symlinks need Developer Mode){provenance}")
             elif status == "exists":
-                result.item(cfg["name"], "exists", "already linked")
+                result.item(cfg["name"], "exists", f"already linked{provenance}")
             elif status == "skipped":
                 result.item(cfg["name"], "skipped", "user declined")
             else:
                 result.item(cfg["name"], "failed", "could not create symlink")
 
         return result
+
+
+def _find_source_label(path, sources) -> str:
+    """Return 'source_name: source_path' for whichever source owns *path*."""
+    from pathlib import Path as P
+
+    resolved = P(path).resolve()
+    for source in sources:
+        if resolved.is_relative_to(source.path.resolve()):
+            return f"{source.name}: {source.path}"
+    return ""
