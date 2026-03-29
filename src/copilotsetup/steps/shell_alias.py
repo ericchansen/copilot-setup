@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -18,21 +19,39 @@ _PS_TEMPLATE = """\
 function {alias} {{
     $configPath = Join-Path $env:USERPROFILE ".copilot" "config.json"
     if (-not (Test-Path -Path $configPath -PathType Leaf)) {{
-        Write-Error "Copilot config not found at $configPath. Run: copilot plugin install {source}"
+        Write-Error "Copilot config not found at $configPath."
         return
     }}
     try {{
         $config = Get-Content $configPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
     }} catch {{
-        Write-Error "Failed to parse Copilot config at $configPath. Run setup again or reinstall the plugin."
+        Write-Error "Failed to parse Copilot config at $configPath."
         return
     }}
-    $plugin = $config.installed_plugins | Where-Object {{ $_.name -eq "{name}" }}
-    if (-not $plugin) {{
-        Write-Error "{name} plugin not found. Install with: copilot plugin install {source}"
-        return
+    $pluginNames = @({plugin_names_ps})
+    $changed = $false
+    foreach ($p in $config.installed_plugins) {{
+        if ($pluginNames -contains $p.name -and -not $p.enabled) {{
+            $p.enabled = $true
+            $changed = $true
+        }}
+    }}{marketplace_ps_enable}
+    if ($changed) {{
+        $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
     }}
-    copilot --plugin-dir $plugin.cache_path @args
+    try {{
+        copilot @args
+    }} finally {{
+        if ($changed) {{
+            $config = Get-Content $configPath -Raw | ConvertFrom-Json
+            foreach ($p in $config.installed_plugins) {{
+                if ($pluginNames -contains $p.name) {{
+                    $p.enabled = $false
+                }}
+            }}{marketplace_ps_disable}
+            $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
+        }}
+    }}
 }}
 {block_end}
 """
@@ -42,7 +61,7 @@ _BASH_TEMPLATE = """\
 {alias}() {{
     local config_path="$HOME/.copilot/config.json"
     if [ ! -f "$config_path" ]; then
-        echo "Error: Copilot config not found at $config_path. Run: copilot plugin install {source}" >&2
+        echo "Error: Copilot config not found at $config_path." >&2
         return 1
     fi
     local _py
@@ -54,24 +73,32 @@ _BASH_TEMPLATE = """\
         echo "Error: Python not found. Install Python 3.10+ to use {alias}." >&2
         return 1
     fi
-    local plugin_path
-    plugin_path=$("$_py" -c "
-import json, sys
+    "$_py" -c "
+import json
 config = json.load(open('$config_path'))
-plugins = config.get('installed_plugins', [])
-match = [p for p in plugins if p['name'] == '{name}']
-print(match[0]['cache_path'] if match else '')
-" 2>/dev/null)
-    if [ -z "$plugin_path" ]; then
-        echo "Error: {name} plugin not found. Install with: copilot plugin install {source}" >&2
-        return 1
-    fi
-    copilot --plugin-dir "$plugin_path" "$@"
+names = {plugin_names_py}
+for p in config.get('installed_plugins', []):
+    if p['name'] in names:
+        p['enabled'] = True
+{marketplace_py_enable}json.dump(config, open('$config_path', 'w'), indent=2)
+" 2>/dev/null
+    _copilot_exit=0
+    copilot "$@" || _copilot_exit=$?
+    "$_py" -c "
+import json
+config = json.load(open('$config_path'))
+names = {plugin_names_py}
+for p in config.get('installed_plugins', []):
+    if p['name'] in names:
+        p['enabled'] = False
+{marketplace_py_disable}json.dump(config, open('$config_path', 'w'), indent=2)
+" 2>/dev/null
+    return $_copilot_exit
 }}
 {block_end}
 """
 
-# Developer variant: point directly at the local clone
+# Developer variant: point directly at the local clone (single plugin)
 _PS_DEV_TEMPLATE = """\
 {block_start}
 function {alias} {{
@@ -178,16 +205,20 @@ def _append_alias(profile_path: Path, block: str) -> bool:
 
 
 class ShellAliasStep:
-    """Create shell aliases for disabled-by-default plugins (e.g., copilot-msx)."""
+    """Create shell aliases for disabled-by-default plugins (e.g., copilot-work)."""
 
     name = "Setup · Shell Aliases"
 
     def check(self, ctx: SetupContext) -> bool:
-        # Run when any plugins have aliases
         merged = getattr(ctx, "merged_config", None)
         if not merged:
             return False
-        return any(info.get("alias") for info in merged.plugins.values())
+        has_alias_plugins = any(info.get("alias") for info in merged.plugins.values())
+        has_disable_paths = bool(merged.disable_plugin_paths)
+        has_source_plugins = any(
+            sp.get("alias") for sp in getattr(merged, "source_plugins", [])
+        )
+        return has_alias_plugins or has_disable_paths or has_source_plugins
 
     def run(self, ctx: SetupContext) -> StepResult:
         result = StepResult()
@@ -196,19 +227,115 @@ class ShellAliasStep:
         if not merged:
             return result
 
-        alias_plugins = [(name, info) for name, info in merged.plugins.items() if info.get("alias")]
-        if not alias_plugins:
+        # Group all disabled plugin names by alias
+        # 1. Plugins with explicit alias in local.json
+        alias_groups: dict[str, set[str]] = {}
+        alias_clone_paths: dict[str, Path] = {}  # alias → clone path (dev mode)
+
+        for name, info in merged.plugins.items():
+            alias = info.get("alias")
+            if not alias:
+                continue
+            alias_groups.setdefault(alias, set()).add(name)
+            clone = ctx.local_clone_map.get(name)
+            if clone:
+                alias_clone_paths[alias] = clone
+
+        # 2. Plugins disabled by path (from PluginDisableStep)
+        disabled_names: set[str] = getattr(ctx, "disabled_plugin_names", set())
+        # Find which alias to associate path-disabled plugins with
+        # Check explicit plugins first, then source-as-plugins
+        primary_alias = None
+        for info in merged.plugins.values():
+            if info.get("alias"):
+                primary_alias = info["alias"]
+                break
+        if not primary_alias:
+            for sp in getattr(merged, "source_plugins", []):
+                if sp.get("alias"):
+                    primary_alias = sp["alias"]
+                    break
+
+        if primary_alias and disabled_names:
+            alias_groups.setdefault(primary_alias, set()).update(disabled_names)
+
+        if not alias_groups:
             return result
 
-        for name, info in alias_plugins:
-            alias = info["alias"]
-            source = info.get("source", "")
-            clone_path = ctx.local_clone_map.get(name)
+        for alias, plugin_names in alias_groups.items():
+            clone_path = alias_clone_paths.get(alias)
+
+            # Dev mode: single plugin with local clone → simple --plugin-dir alias
+            if clone_path and len(plugin_names) == 1:
+                fmt = {
+                    "alias": alias,
+                    "clone_path": str(clone_path),
+                    "block_start": _BLOCK_START.format(alias=alias),
+                    "block_end": _BLOCK_END.format(alias=alias),
+                }
+                if IS_WINDOWS:
+                    block = _PS_DEV_TEMPLATE.format(**fmt)
+                    profile = _profile_path_ps()
+                    if not profile:
+                        result.item(alias, "failed", "could not determine PowerShell profile path")
+                        continue
+                    if _append_alias(profile, block):
+                        result.item(alias, "created", f"dev alias → {clone_path}")
+                    else:
+                        result.item(alias, "failed", f"could not write to {profile}")
+                else:
+                    block = _BASH_DEV_TEMPLATE.format(**fmt)
+                    profiles = _profile_paths_unix()
+                    wrote = [p for p in profiles if _append_alias(p, block)]
+                    if wrote:
+                        result.item(alias, "created", f"dev alias → {clone_path}")
+                continue
+
+            # Standard mode: enable/disable multiple plugins via config.json
+            sorted_names = sorted(plugin_names)
+            plugin_names_ps = ", ".join(f'"{n}"' for n in sorted_names)
+            plugin_names_py = repr(set(sorted_names))
+
+            # Marketplace snippets (add on enable, remove on disable)
+            work_marketplaces: dict = getattr(ctx, "work_marketplaces", {})
+            if work_marketplaces:
+                mkt_json = json.dumps(work_marketplaces)
+                mkt_names_ps = ", ".join(f'"{n}"' for n in work_marketplaces)
+                mkt_keys_py = repr(list(work_marketplaces.keys()))
+                marketplace_ps_enable = (
+                    "\n    if (-not $config.marketplaces) {{ "
+                    "$config | Add-Member -NotePropertyName 'marketplaces' -NotePropertyValue ([PSCustomObject]@{{}}) }}"
+                    f"\n    $mkt = '{mkt_json}' | ConvertFrom-Json"
+                    "\n    foreach ($prop in $mkt.PSObject.Properties) {{ "
+                    "$config.marketplaces | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force }}"
+                    "\n    $changed = $true"
+                )
+                marketplace_ps_disable = (
+                    f"\n            $mktNames = @({mkt_names_ps})"
+                    "\n            foreach ($mn in $mktNames) {{ $config.marketplaces.PSObject.Properties.Remove($mn) }}"
+                )
+                marketplace_py_enable = (
+                    f"mkt = {mkt_json}\n"
+                    "config.setdefault('marketplaces', {{}}).update(mkt)\n"
+                )
+                marketplace_py_disable = (
+                    f"for mn in {mkt_keys_py}:\n"
+                    "    config.get('marketplaces', {{}}).pop(mn, None)\n"
+                )
+            else:
+                marketplace_ps_enable = ""
+                marketplace_ps_disable = ""
+                marketplace_py_enable = ""
+                marketplace_py_disable = ""
 
             fmt = {
                 "alias": alias,
-                "name": name,
-                "source": source,
+                "plugin_names_ps": plugin_names_ps,
+                "plugin_names_py": plugin_names_py,
+                "marketplace_ps_enable": marketplace_ps_enable,
+                "marketplace_ps_disable": marketplace_ps_disable,
+                "marketplace_py_enable": marketplace_py_enable,
+                "marketplace_py_disable": marketplace_py_disable,
                 "block_start": _BLOCK_START.format(alias=alias),
                 "block_end": _BLOCK_END.format(alias=alias),
             }
@@ -218,24 +345,18 @@ class ShellAliasStep:
                 if not profile:
                     result.item(alias, "failed", "could not determine PowerShell profile path")
                     continue
-                if clone_path:
-                    block = _PS_DEV_TEMPLATE.format(**fmt, clone_path=str(clone_path))
-                else:
-                    block = _PS_TEMPLATE.format(**fmt)
+                block = _PS_TEMPLATE.format(**fmt)
                 if _append_alias(profile, block):
-                    result.item(alias, "created", f"alias added to {profile.name}")
+                    result.item(alias, "created", f"alias ({len(sorted_names)} plugins) → {profile.name}")
                 else:
                     result.item(alias, "failed", f"could not write to {profile}")
             else:
+                block = _BASH_TEMPLATE.format(**fmt)
                 profiles = _profile_paths_unix()
-                if clone_path:
-                    block = _BASH_DEV_TEMPLATE.format(**fmt, clone_path=str(clone_path))
-                else:
-                    block = _BASH_TEMPLATE.format(**fmt)
                 wrote = [p for p in profiles if _append_alias(p, block)]
                 failed = [p for p in profiles if p not in wrote]
                 if wrote:
-                    result.item(alias, "created", f"alias added to {', '.join(p.name for p in wrote)}")
+                    result.item(alias, "created", f"alias ({len(sorted_names)} plugins) → {', '.join(p.name for p in wrote)}")
                 if failed:
                     result.item(alias, "failed", f"could not write to {', '.join(str(p) for p in failed)}")
 

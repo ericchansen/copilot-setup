@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from copilotsetup.models import SetupContext, StepResult, UIShim
+from copilotsetup.platform_ops import is_link, remove_link
 from copilotsetup.skills import get_skill_folders, link_skills
 from copilotsetup.sources import ConfigSource
+
+
+def _normalize(p: str) -> str:
+    return str(Path(p).resolve()).replace("\\", "/").rstrip("/")
 
 
 class SkillsStep:
@@ -25,8 +32,26 @@ class SkillsStep:
             "skills_failed": [],
         }
 
-        # Discover skills from ALL config sources with attribution
+        # Clean up stale links for skills now handled by source-as-plugin
+        # When a config source opts into asPlugin, its skills are discovered
+        # through the plugin mechanism — remove old direct junctions/symlinks
         merged = getattr(ctx, "merged_config", None)
+        if merged:
+            plugin_paths = [
+                _normalize(sp["path"])
+                for sp in getattr(merged, "source_plugins", [])
+            ]
+            if plugin_paths:
+                skills_dir = ctx.copilot_skills
+                if skills_dir.is_dir():
+                    for entry in skills_dir.iterdir():
+                        if is_link(entry):
+                            target = _normalize(str(entry.resolve()))
+                            if any(target.startswith(prefix) for prefix in plugin_paths):
+                                remove_link(entry)
+                                result.item(entry.name, "success", "removed — now handled by plugin")
+
+        # Discover skills from ALL config sources with attribution
         sources: list[ConfigSource] = merged.sources if merged else []
         all_skill_dirs = getattr(ctx, "all_skill_dirs", [ctx.repo_skills])
         all_skills: list[dict] = []

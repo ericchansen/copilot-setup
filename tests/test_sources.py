@@ -149,6 +149,46 @@ class TestLoadSource:
 
         assert "my-plugin" in source.plugins
 
+    def test_disabled_by_default_flag(self, tmp_path: Path):
+        """Servers with disabledByDefault: true are tracked and field is stripped."""
+        src_dir = tmp_path / "work"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(
+            copilot / "mcp.json",
+            {
+                "mcpServers": {
+                    "always-on": {"command": "npx", "args": ["--always"]},
+                    "opt-in": {"url": "https://example.com", "disabledByDefault": True},
+                    "also-on": {"command": "node", "args": ["server.js"]},
+                }
+            },
+        )
+
+        source = ConfigSource(name="work", path=src_dir)
+        load_source(source)
+
+        assert len(source.servers) == 3
+        assert source.disabled_by_default == {"opt-in"}
+        # disabledByDefault should be stripped from the entry itself
+        assert "disabledByDefault" not in source.servers["opt-in"]
+        assert "disabledByDefault" not in source.servers["always-on"]
+
+    def test_loads_disable_plugin_paths(self, tmp_path: Path):
+        """disablePluginsByPath from local.json is loaded."""
+        src_dir = tmp_path / "work"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(
+            copilot / "local.json",
+            {"disablePluginsByPath": ["~/repos/agency-cowork", "~/repos/other"]},
+        )
+
+        source = ConfigSource(name="work", path=src_dir)
+        load_source(source)
+
+        assert source.disable_plugin_paths == ["~/repos/agency-cowork", "~/repos/other"]
+
 
 class TestMergeSources:
     def test_additive_servers(self, tmp_path: Path):
@@ -215,6 +255,7 @@ class TestMergeSources:
         assert merged.servers == {}
         assert merged.skill_dirs == []
         assert merged.instructions is None
+        assert merged.disabled_by_default == set()
 
     def test_additive_plugins(self, tmp_path: Path):
         s1 = ConfigSource(name="a", path=tmp_path)
@@ -236,3 +277,64 @@ class TestMergeSources:
         merged = merge_sources([s1, s2])
         assert len(merged.plugins) == 1
         assert merged.plugins["dup"]["source"] == "owner/first"
+
+    def test_disabled_by_default_merged(self, tmp_path: Path):
+        """Disabled-by-default flags are unioned across sources."""
+        s1 = ConfigSource(name="a", path=tmp_path)
+        s1.servers = {"srv1": {"command": "npx"}, "srv2": {"url": "https://example.com"}}
+        s1.disabled_by_default = {"srv2"}
+
+        s2 = ConfigSource(name="b", path=tmp_path)
+        s2.servers = {"srv3": {"command": "node"}}
+        s2.disabled_by_default = {"srv3"}
+
+        merged = merge_sources([s1, s2])
+        assert merged.disabled_by_default == {"srv2", "srv3"}
+        # All servers are still in merged.servers (filtering happens in cli.py)
+        assert set(merged.servers.keys()) == {"srv1", "srv2", "srv3"}
+
+    def test_as_plugin_excludes_skill_dirs(self, tmp_path: Path):
+        """Sources with as_plugin route skills into source_plugins, not skill_dirs."""
+        # Source with as_plugin — skills go to source_plugins
+        d_work = tmp_path / "work" / ".copilot" / "skills"
+        d_work.mkdir(parents=True)
+
+        s_work = ConfigSource(name="work", path=tmp_path / "work")
+        s_work.skill_dirs = [d_work]
+        s_work.as_plugin = {"name": "copilot-config-work", "alias": "copilot-work"}
+
+        # Source without as_plugin — skills go to skill_dirs normally
+        d_personal = tmp_path / "personal" / ".copilot" / "skills"
+        d_personal.mkdir(parents=True)
+
+        s_personal = ConfigSource(name="personal", path=tmp_path / "personal")
+        s_personal.skill_dirs = [d_personal]
+
+        merged = merge_sources([s_work, s_personal])
+
+        # work skills excluded from skill_dirs
+        assert len(merged.skill_dirs) == 1
+        assert merged.skill_dirs[0] == d_personal
+
+        # work skills registered as source plugin
+        assert len(merged.source_plugins) == 1
+        assert merged.source_plugins[0]["name"] == "copilot-config-work"
+        assert merged.source_plugins[0]["alias"] == "copilot-work"
+        plugin_path = merged.source_plugins[0]["path"]
+        assert plugin_path == str(tmp_path / "work" / ".copilot")
+
+    def test_as_plugin_no_alias_still_excluded(self, tmp_path: Path):
+        """Source with as_plugin (no alias) still routes through source_plugins."""
+        d = tmp_path / "personal" / ".copilot" / "skills"
+        d.mkdir(parents=True)
+
+        s = ConfigSource(name="personal", path=tmp_path / "personal")
+        s.skill_dirs = [d]
+        s.as_plugin = {"name": "copilot-config"}
+
+        merged = merge_sources([s])
+
+        assert merged.skill_dirs == []
+        assert len(merged.source_plugins) == 1
+        assert merged.source_plugins[0]["name"] == "copilot-config"
+        assert merged.source_plugins[0]["alias"] == ""

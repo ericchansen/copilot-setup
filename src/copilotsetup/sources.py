@@ -59,8 +59,12 @@ class ConfigSource:
 
     # Loaded data (populated by load_source)
     servers: dict[str, dict] = field(default_factory=dict)  # standard mcpServers format
+    disabled_by_default: set[str] = field(default_factory=set)  # server names with disabledByDefault
     local_paths: dict[str, str] = field(default_factory=dict)  # server → local dev path
     plugins: dict[str, dict] = field(default_factory=dict)  # server → {source, alias}
+    disable_plugin_paths: list[str] = field(default_factory=list)  # paths to disable plugins by
+    as_plugin: dict | None = None  # {"name": "...", "alias": "..."} — register source as plugin
+    marketplaces: dict[str, dict] = field(default_factory=dict)  # marketplace definitions
     lsp_servers: dict | None = None
     lsp_servers_path: Path | None = None
     portable_config: Path | None = None
@@ -82,8 +86,12 @@ class MergedConfig:
     """Result of merging all config sources."""
 
     servers: dict[str, dict] = field(default_factory=dict)  # name → standard entry
+    disabled_by_default: set[str] = field(default_factory=set)  # servers to exclude from enabled
     local_paths: dict[str, str] = field(default_factory=dict)  # server → local dev path
     plugins: dict[str, dict] = field(default_factory=dict)  # server → {source, alias}
+    disable_plugin_paths: list[str] = field(default_factory=list)  # paths to disable plugins by
+    source_plugins: list[dict] = field(default_factory=list)  # sources registered as plugins
+    marketplaces: dict[str, dict] = field(default_factory=dict)  # work-only marketplaces to manage
     lsp_servers: dict | None = None
     lsp_servers_path: Path | None = None
     portable_config: Path | None = None
@@ -158,7 +166,11 @@ def load_source(source: ConfigSource) -> ConfigSource:
     if mcp_file:
         try:
             data = json.loads(mcp_file.read_text("utf-8"))
-            source.servers = data.get("mcpServers", {})
+            raw_servers = data.get("mcpServers", {})
+            for name, entry in raw_servers.items():
+                if entry.pop("disabledByDefault", False):
+                    source.disabled_by_default.add(name)
+            source.servers = raw_servers
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", mcp_file, exc)
 
@@ -184,6 +196,9 @@ def load_source(source: ConfigSource) -> ConfigSource:
                 for name, info in plugins_value.items():
                     if name not in source.plugins:
                         source.plugins[name] = info
+            source.disable_plugin_paths = local_data.get("disablePluginsByPath", [])
+            source.as_plugin = local_data.get("asPlugin")
+            source.marketplaces = local_data.get("marketplaces", {})
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", local_file, exc)
 
@@ -233,6 +248,9 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
             else:
                 logger.info("Duplicate server '%s' — keeping first occurrence", name)
 
+        # Additive: disabled-by-default flags
+        merged.disabled_by_default |= source.disabled_by_default
+
         # Additive: local paths (first occurrence of each name wins)
         for name, path in source.local_paths.items():
             if name not in merged.local_paths:
@@ -243,8 +261,36 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
             if name not in merged.plugins:
                 merged.plugins[name] = plugin
 
-        # Additive: skill dirs
-        merged.skill_dirs.extend(source.skill_dirs)
+        # Additive: disable-plugin paths
+        merged.disable_plugin_paths.extend(source.disable_plugin_paths)
+
+        # Additive: marketplaces (first occurrence of each name wins)
+        for name, marketplace in source.marketplaces.items():
+            if name not in merged.marketplaces:
+                merged.marketplaces[name] = marketplace
+
+        # Source-as-plugin: register and skip skill_dir linking
+        if source.as_plugin:
+            # Determine the plugin directory (.copilot/ dir)
+            if source.skill_dirs:
+                plugin_dir = source.skill_dirs[0].parent  # .copilot/ dir
+            else:
+                plugin_dir = _find_file(source.path, ".") or source.path
+                # Try .copilot/ subdir
+                copilot_dir = source.path / ".copilot"
+                if copilot_dir.is_dir():
+                    plugin_dir = copilot_dir
+            merged.source_plugins.append(
+                {
+                    "name": source.as_plugin.get("name", source.name),
+                    "alias": source.as_plugin.get("alias", ""),
+                    "path": str(plugin_dir),
+                }
+            )
+            # Skills come through plugin mechanism — don't add to skill_dirs
+        else:
+            # Additive: skill dirs (only for non-plugin sources)
+            merged.skill_dirs.extend(source.skill_dirs)
 
         # First-wins: LSP servers
         if merged.lsp_servers is None and source.lsp_servers is not None:
