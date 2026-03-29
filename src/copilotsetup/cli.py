@@ -186,7 +186,9 @@ def _run_setup(args: argparse.Namespace) -> None:
     )
 
     # Inject merged data into context for steps to consume
-    ctx.enabled_servers = merged.servers  # dict[str, dict] — name → standard entry
+    # Filter out servers marked disabledByDefault — they require an alias session to load
+    enabled = {n: e for n, e in merged.servers.items() if n not in merged.disabled_by_default}
+    ctx.enabled_servers = enabled  # dict[str, dict] — name → standard entry
     ctx.merged_config = merged  # type: ignore[attr-defined]
     ctx.all_skill_dirs = merged.skill_dirs  # type: ignore[attr-defined]
 

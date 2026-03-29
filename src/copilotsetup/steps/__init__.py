@@ -11,6 +11,7 @@ from copilotsetup.steps.git_auth import GitAuthStep
 from copilotsetup.steps.lsp_config import LspConfigStep
 from copilotsetup.steps.mcp_build import McpBuildStep
 from copilotsetup.steps.mcp_config import McpConfigStep
+from copilotsetup.steps.plugin_disable import PluginDisableStep
 from copilotsetup.steps.plugin_update import PluginUpdateStep
 from copilotsetup.steps.plugins import PluginsStep
 from copilotsetup.steps.shell_alias import ShellAliasStep
@@ -28,6 +29,7 @@ ALL_STEPS = [
     TrustedFoldersStep(),
     SkillsStep(),
     PluginsStep(),
+    PluginDisableStep(),
     PluginUpdateStep(),
     ShellAliasStep(),
     McpBuildStep(),
@@ -47,6 +49,7 @@ __all__ = [
     "LspConfigStep",
     "McpBuildStep",
     "McpConfigStep",
+    "PluginDisableStep",
     "PluginUpdateStep",
     "PluginsStep",
     "ShellAliasStep",
