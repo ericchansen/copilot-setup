@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from copilotsetup.steps.plugin_disable import PluginDisableStep, _normalize
+from copilotsetup.steps.plugin_disable import PluginDisableStep, _normalize, _under_prefix
 
 
 class TestNormalize:
@@ -17,6 +17,20 @@ class TestNormalize:
     def test_strips_trailing_slash(self):
         result = _normalize("/tmp/foo/")
         assert not result.endswith("/")
+
+
+class TestUnderPrefix:
+    def test_exact_match(self):
+        assert _under_prefix("C:/Users/me/repos/agency", "C:/Users/me/repos/agency")
+
+    def test_child_path(self):
+        assert _under_prefix("C:/Users/me/repos/agency/child", "C:/Users/me/repos/agency")
+
+    def test_sibling_not_matched(self):
+        assert not _under_prefix("C:/Users/me/repos/agency2", "C:/Users/me/repos/agency")
+
+    def test_partial_name_not_matched(self):
+        assert not _under_prefix("C:/Users/me/repos/agency-backup", "C:/Users/me/repos/agency")
 
 
 class TestPluginDisableStep:
@@ -105,7 +119,9 @@ class TestPluginDisableStep:
 
     def test_check_returns_true_with_source_plugins(self, tmp_path: Path):
         ctx = self._make_ctx(
-            tmp_path, [], [],
+            tmp_path,
+            [],
+            [],
             source_plugins=[{"name": "my-plugin", "alias": "", "path": "/tmp"}],
         )
         step = PluginDisableStep()
@@ -129,7 +145,9 @@ class TestPluginDisableStep:
         plugin_dir = tmp_path / "copilot-config-work" / ".copilot"
         plugin_dir.mkdir(parents=True)
         ctx = self._make_ctx(
-            tmp_path, [], [],
+            tmp_path,
+            [],
+            [],
             source_plugins=[
                 {"name": "copilot-config-work", "alias": "copilot-work", "path": str(plugin_dir)},
             ],
@@ -149,7 +167,9 @@ class TestPluginDisableStep:
         plugin_dir = tmp_path / "copilot-config" / ".copilot"
         plugin_dir.mkdir(parents=True)
         ctx = self._make_ctx(
-            tmp_path, [], [],
+            tmp_path,
+            [],
+            [],
             source_plugins=[
                 {"name": "copilot-config", "alias": "", "path": str(plugin_dir)},
             ],
@@ -172,7 +192,9 @@ class TestPluginDisableStep:
             {"name": "copilot-config-work", "enabled": True, "cache_path": str(old_dir)},
         ]
         ctx = self._make_ctx(
-            tmp_path, plugins, [],
+            tmp_path,
+            plugins,
+            [],
             source_plugins=[
                 {"name": "copilot-config-work", "alias": "copilot-work", "path": str(new_dir)},
             ],
@@ -191,7 +213,9 @@ class TestPluginDisableStep:
         plugin_dir = tmp_path / ".copilot"
         plugin_dir.mkdir(parents=True)
         ctx = self._make_ctx(
-            tmp_path, [], [],
+            tmp_path,
+            [],
+            [],
             source_plugins=[
                 {"name": "copilot-config-work", "alias": "copilot-work", "path": str(plugin_dir)},
             ],
