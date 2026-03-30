@@ -8,11 +8,23 @@ from pathlib import Path
 
 from copilotsetup.config import json_load_safe
 from copilotsetup.models import SetupContext, StepResult
+from copilotsetup.platform_ops import IS_WINDOWS
 
 
 def _normalize(p: str) -> str:
     """Expand and normalize a path string for prefix matching."""
     return str(Path(p).expanduser().resolve()).replace("\\", "/").rstrip("/")
+
+
+def _under_prefix(path: str, prefix: str) -> bool:
+    """Check if *path* is equal to or a child of *prefix* using a separator boundary.
+
+    Prevents ``/repos/agency`` matching ``/repos/agency2``.
+    """
+    prefix_sep = prefix if prefix.endswith("/") else prefix + "/"
+    if IS_WINDOWS:
+        return path.lower() == prefix.lower() or path.lower().startswith(prefix_sep.lower())
+    return path == prefix or path.startswith(prefix_sep)
 
 
 class PluginDisableStep:
@@ -97,11 +109,13 @@ class PluginDisableStep:
 
         if prefixes:
             for entry in registered:
+                if not isinstance(entry, dict):
+                    continue
                 cache_path = entry.get("cache_path", "")
                 if not cache_path:
                     continue
                 norm_cache = _normalize(cache_path)
-                if any(norm_cache.startswith(prefix) for prefix in prefixes):
+                if any(_under_prefix(norm_cache, prefix) for prefix in prefixes):
                     name = entry.get("name", "unknown")
                     if entry.get("enabled", True):
                         entry["enabled"] = False

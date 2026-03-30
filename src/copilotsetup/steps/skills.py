@@ -37,10 +37,7 @@ class SkillsStep:
         # through the plugin mechanism — remove old direct junctions/symlinks
         merged = getattr(ctx, "merged_config", None)
         if merged:
-            plugin_paths = [
-                _normalize(sp["path"])
-                for sp in getattr(merged, "source_plugins", [])
-            ]
+            plugin_paths = [_normalize(sp["path"]) for sp in getattr(merged, "source_plugins", [])]
             if plugin_paths:
                 skills_dir = ctx.copilot_skills
                 if skills_dir.is_dir():

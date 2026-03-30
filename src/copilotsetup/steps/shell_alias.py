@@ -29,23 +29,23 @@ function {alias} {{
         return
     }}
     $pluginNames = @({plugin_names_ps})
-    $changed = $false
+    $toggled = @()
     foreach ($p in $config.installed_plugins) {{
         if ($pluginNames -contains $p.name -and -not $p.enabled) {{
             $p.enabled = $true
-            $changed = $true
+            $toggled += $p.name
         }}
     }}{marketplace_ps_enable}
-    if ($changed) {{
+    if ($toggled.Count -gt 0{marketplace_ps_changed}) {{
         $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
     }}
     try {{
         copilot @args
     }} finally {{
-        if ($changed) {{
+        if ($toggled.Count -gt 0{marketplace_ps_changed}) {{
             $config = Get-Content $configPath -Raw | ConvertFrom-Json
             foreach ($p in $config.installed_plugins) {{
-                if ($pluginNames -contains $p.name) {{
+                if ($toggled -contains $p.name) {{
                     $p.enabled = $false
                 }}
             }}{marketplace_ps_disable}
@@ -73,23 +73,27 @@ _BASH_TEMPLATE = """\
         echo "Error: Python not found. Install Python 3.10+ to use {alias}." >&2
         return 1
     fi
-    "$_py" -c "
+    local _toggled
+    _toggled=$("$_py" -c "
 import json
 config = json.load(open('$config_path'))
 names = {plugin_names_py}
+toggled = []
 for p in config.get('installed_plugins', []):
-    if p['name'] in names:
+    if p['name'] in names and not p.get('enabled', True):
         p['enabled'] = True
+        toggled.append(p['name'])
 {marketplace_py_enable}json.dump(config, open('$config_path', 'w'), indent=2)
-" 2>/dev/null
+print(','.join(toggled))
+" 2>/dev/null)
     _copilot_exit=0
     copilot "$@" || _copilot_exit=$?
     "$_py" -c "
 import json
 config = json.load(open('$config_path'))
-names = {plugin_names_py}
+toggled = set('$_toggled'.split(',')) if '$_toggled' else set()
 for p in config.get('installed_plugins', []):
-    if p['name'] in names:
+    if p['name'] in toggled:
         p['enabled'] = False
 {marketplace_py_disable}json.dump(config, open('$config_path', 'w'), indent=2)
 " 2>/dev/null
@@ -214,11 +218,8 @@ class ShellAliasStep:
         if not merged:
             return False
         has_alias_plugins = any(info.get("alias") for info in merged.plugins.values())
-        has_disable_paths = bool(merged.disable_plugin_paths)
-        has_source_plugins = any(
-            sp.get("alias") for sp in getattr(merged, "source_plugins", [])
-        )
-        return has_alias_plugins or has_disable_paths or has_source_plugins
+        has_source_plugins = any(sp.get("alias") for sp in getattr(merged, "source_plugins", []))
+        return has_alias_plugins or has_source_plugins
 
     def run(self, ctx: SetupContext) -> StepResult:
         result = StepResult()
@@ -308,22 +309,19 @@ class ShellAliasStep:
                     f"\n    $mkt = '{mkt_json}' | ConvertFrom-Json"
                     "\n    foreach ($prop in $mkt.PSObject.Properties) {{ "
                     "$config.marketplaces | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force }}"
-                    "\n    $changed = $true"
                 )
+                marketplace_ps_changed = " -or $true"  # marketplace always needs cleanup
                 marketplace_ps_disable = (
                     f"\n            $mktNames = @({mkt_names_ps})"
                     "\n            foreach ($mn in $mktNames) {{ $config.marketplaces.PSObject.Properties.Remove($mn) }}"
                 )
-                marketplace_py_enable = (
-                    f"mkt = {mkt_json}\n"
-                    "config.setdefault('marketplaces', {{}}).update(mkt)\n"
-                )
+                marketplace_py_enable = f"mkt = {mkt_json}\nconfig.setdefault('marketplaces', {{{{}}}}).update(mkt)\n"
                 marketplace_py_disable = (
-                    f"for mn in {mkt_keys_py}:\n"
-                    "    config.get('marketplaces', {{}}).pop(mn, None)\n"
+                    f"for mn in {mkt_keys_py}:\n    config.get('marketplaces', {{{{}}}}).pop(mn, None)\n"
                 )
             else:
                 marketplace_ps_enable = ""
+                marketplace_ps_changed = ""
                 marketplace_ps_disable = ""
                 marketplace_py_enable = ""
                 marketplace_py_disable = ""
@@ -333,6 +331,7 @@ class ShellAliasStep:
                 "plugin_names_ps": plugin_names_ps,
                 "plugin_names_py": plugin_names_py,
                 "marketplace_ps_enable": marketplace_ps_enable,
+                "marketplace_ps_changed": marketplace_ps_changed,
                 "marketplace_ps_disable": marketplace_ps_disable,
                 "marketplace_py_enable": marketplace_py_enable,
                 "marketplace_py_disable": marketplace_py_disable,
@@ -356,7 +355,9 @@ class ShellAliasStep:
                 wrote = [p for p in profiles if _append_alias(p, block)]
                 failed = [p for p in profiles if p not in wrote]
                 if wrote:
-                    result.item(alias, "created", f"alias ({len(sorted_names)} plugins) → {', '.join(p.name for p in wrote)}")
+                    result.item(
+                        alias, "created", f"alias ({len(sorted_names)} plugins) → {', '.join(p.name for p in wrote)}"
+                    )
                 if failed:
                     result.item(alias, "failed", f"could not write to {', '.join(str(p) for p in failed)}")
 

@@ -8,9 +8,9 @@ all data (servers, plugins, skills, instructions) comes from config source repos
 
 ## Architecture
 
-- **Entry point**: `setup.py` → `main()` → `_run_setup()`
-- **Source discovery**: `lib/sources.py` reads `~/.copilot/config-sources.json`
-- **Pipeline**: 16 ordered steps defined in `copilot_setup/steps/__init__.py`
+- **Entry point**: `cli.py` → `main()` → `_run_setup()`
+- **Source discovery**: `sources.py` reads `~/.copilot/config-sources.json`
+- **Pipeline**: Ordered steps defined in `copilotsetup/steps/__init__.py`
 - **Step protocol**: Each step has `name: str`, `check(ctx) -> bool`, `run(ctx) -> StepResult`
 
 ## Key Design Decisions
@@ -21,25 +21,39 @@ all data (servers, plugins, skills, instructions) comes from config source repos
 - **Server deduplication**: By name — first occurrence wins
 - **Category field stripped**: `load_source()` removes `category` from server definitions
 - **Legacy support**: Sources using `.copilot/` subdir layout are auto-detected
+- **Platform ops**: Windows junctions require special handling — always use `platform_ops.is_link()` / `remove_link()`, never `is_symlink()` / `unlink()` directly
+- **Path prefix matching**: Always use separator-boundary checks (append `/` before `startswith`) to prevent `/agency` matching `/agency2`. See `_under_prefix()` in `plugin_disable.py` and `_points_into_owned_root()` in `restore.py`
 
 ## File Conventions
 
 When editing:
-- `lib/sources.py` — Core merging logic. If you change merge strategies, update tests
-- `copilot_setup/steps/` — Each step reads from `ctx` (SetupContext). Steps must not import
+- `sources.py` — Core merging logic. If you change merge strategies, update tests
+- `copilotsetup/steps/` — Each step reads from `ctx` (SetupContext). Steps must not import
   data directly; they get it from the context which is populated from merged sources
-- `setup.py` — Builds SetupContext by calling `discover_sources()` → `load_source()` → `merge_sources()`
+- `cli.py` — Builds SetupContext by calling `discover_sources()` → `load_source()` → `merge_sources()`
 
-## Testing
+## Pre-commit / Pre-push Checklist (MANDATORY)
+
+**CI runs ALL THREE checks. Every one must pass locally before committing.**
 
 ```bash
-python -m pytest tests/ -v
+# 1. Lint — catches code errors, unused imports, bad patterns
 python -m ruff check .
+
+# 2. Format — catches formatting violations (trailing whitespace, line length, etc.)
 python -m ruff format --check .
+# Fix formatting issues with: python -m ruff format .
+
+# 3. Tests — all tests must pass
+python -m pytest tests/ -v
 ```
 
-**CI runs both `ruff check` AND `ruff format --check`.** You MUST run both locally
-before committing. `ruff check` catches lint errors; `ruff format --check` catches
-formatting violations. Fix formatting with `python -m ruff format .`
+**DO NOT skip `ruff format --check`.** It is a separate CI job from `ruff check` and
+will fail the PR independently. Running `ruff check` alone is NOT sufficient.
+
+**Quick one-liner for the full CI check:**
+```bash
+python -m ruff check . && python -m ruff format --check . && python -m pytest tests/ -v
+```
 
 All tests are self-contained with fixture data. No tests depend on external files.

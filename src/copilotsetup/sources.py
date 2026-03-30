@@ -168,6 +168,8 @@ def load_source(source: ConfigSource) -> ConfigSource:
             data = json.loads(mcp_file.read_text("utf-8"))
             raw_servers = data.get("mcpServers", {})
             for name, entry in raw_servers.items():
+                if not isinstance(entry, dict):
+                    continue
                 if entry.pop("disabledByDefault", False):
                     source.disabled_by_default.add(name)
             source.servers = raw_servers
@@ -275,11 +277,9 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
             if source.skill_dirs:
                 plugin_dir = source.skill_dirs[0].parent  # .copilot/ dir
             else:
-                plugin_dir = _find_file(source.path, ".") or source.path
-                # Try .copilot/ subdir
+                # Default to .copilot/ subdir, or source root
                 copilot_dir = source.path / ".copilot"
-                if copilot_dir.is_dir():
-                    plugin_dir = copilot_dir
+                plugin_dir = copilot_dir if copilot_dir.is_dir() else source.path
             merged.source_plugins.append(
                 {
                     "name": source.as_plugin.get("name", source.name),
