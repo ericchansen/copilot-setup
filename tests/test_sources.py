@@ -241,6 +241,33 @@ class TestLoadSource:
 
         assert source.as_plugin is None
 
+    def test_root_level_plugin_json_does_not_enable_as_plugin(self, tmp_path: Path):
+        """A root-level plugin.json should not auto-set as_plugin."""
+        src_dir = tmp_path / "npm-project"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        # Root-level plugin.json (e.g. npm package) — should be ignored
+        _write_json(src_dir / "plugin.json", {"name": "root-plugin", "version": "1.0.0"})
+        _write_json(copilot / "mcp.json", {"mcpServers": {"srv": {"command": "node"}}})
+
+        source = ConfigSource(name="npm-project", path=src_dir)
+        load_source(source)
+
+        assert source.as_plugin is None
+
+    def test_plugin_json_null_name_falls_back(self, tmp_path: Path):
+        """plugin.json with null/empty name falls back to source name."""
+        src_dir = tmp_path / "personal"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(copilot / "plugin.json", {"name": None, "version": "1.0.0"})
+
+        source = ConfigSource(name="my-source", path=src_dir)
+        load_source(source)
+
+        assert source.as_plugin is not None
+        assert source.as_plugin["name"] == "my-source"
+
 
 class TestMergeSources:
     def test_additive_servers(self, tmp_path: Path):
