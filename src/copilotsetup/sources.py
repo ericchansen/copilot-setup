@@ -206,13 +206,20 @@ def load_source(source: ConfigSource) -> ConfigSource:
             logger.warning("Failed to load %s: %s", local_file, exc)
 
     # Auto-detect plugin.json — if present, the source IS a plugin.
+    # Only check .copilot/plugin.json (not root) to avoid false positives
+    # from npm or other ecosystems that also use root-level plugin.json.
     # local.json asPlugin can still override (e.g. to set an alias).
     if source.as_plugin is None:
-        plugin_json_file = _find_file(source.path, _PLUGIN_JSON)
-        if plugin_json_file:
+        plugin_json_file = source.copilot_dir / _PLUGIN_JSON
+        if plugin_json_file.is_file():
             try:
                 plugin_meta = json.loads(plugin_json_file.read_text("utf-8"))
-                source.as_plugin = {"name": plugin_meta.get("name", source.name)}
+                plugin_name = source.name
+                if isinstance(plugin_meta, dict):
+                    raw_name = plugin_meta.get("name")
+                    if isinstance(raw_name, str) and raw_name.strip():
+                        plugin_name = raw_name
+                source.as_plugin = {"name": plugin_name}
             except (json.JSONDecodeError, OSError) as exc:
                 logger.warning("Failed to load %s: %s", plugin_json_file, exc)
 
