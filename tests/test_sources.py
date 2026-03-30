@@ -189,6 +189,58 @@ class TestLoadSource:
 
         assert source.disable_plugin_paths == ["~/repos/agency-cowork", "~/repos/other"]
 
+    def test_auto_detects_plugin_json(self, tmp_path: Path):
+        """plugin.json in .copilot/ auto-sets as_plugin."""
+        src_dir = tmp_path / "personal"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(copilot / "plugin.json", {"name": "copilot-config", "version": "1.0.0"})
+
+        source = ConfigSource(name="personal", path=src_dir)
+        load_source(source)
+
+        assert source.as_plugin is not None
+        assert source.as_plugin["name"] == "copilot-config"
+
+    def test_plugin_json_uses_source_name_fallback(self, tmp_path: Path):
+        """plugin.json without a name falls back to source name."""
+        src_dir = tmp_path / "personal"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(copilot / "plugin.json", {"version": "1.0.0"})
+
+        source = ConfigSource(name="my-source", path=src_dir)
+        load_source(source)
+
+        assert source.as_plugin is not None
+        assert source.as_plugin["name"] == "my-source"
+
+    def test_local_json_as_plugin_overrides_plugin_json(self, tmp_path: Path):
+        """Explicit asPlugin in local.json takes precedence over plugin.json."""
+        src_dir = tmp_path / "work"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(copilot / "plugin.json", {"name": "copilot-config", "version": "1.0.0"})
+        _write_json(copilot / "local.json", {"asPlugin": {"name": "custom-name", "alias": "my-alias"}})
+
+        source = ConfigSource(name="work", path=src_dir)
+        load_source(source)
+
+        assert source.as_plugin["name"] == "custom-name"
+        assert source.as_plugin["alias"] == "my-alias"
+
+    def test_no_plugin_json_no_as_plugin(self, tmp_path: Path):
+        """Without plugin.json or local.json asPlugin, as_plugin stays None."""
+        src_dir = tmp_path / "plain"
+        copilot = src_dir / ".copilot"
+        copilot.mkdir(parents=True)
+        _write_json(copilot / "mcp.json", {"mcpServers": {"srv": {"command": "node"}}})
+
+        source = ConfigSource(name="plain", path=src_dir)
+        load_source(source)
+
+        assert source.as_plugin is None
+
 
 class TestMergeSources:
     def test_additive_servers(self, tmp_path: Path):

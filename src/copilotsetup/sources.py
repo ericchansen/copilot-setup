@@ -45,6 +45,7 @@ _MCP_JSON = "mcp.json"
 _PLUGINS_JSON = "plugins.json"
 _LOCAL_JSON = "local.json"
 _LSP_SERVERS = "lsp-servers.json"
+_PLUGIN_JSON = "plugin.json"
 _PORTABLE_JSON = "config.portable.json"
 _INSTRUCTIONS = "copilot-instructions.md"
 _SKILLS_DIR = "skills"
@@ -203,6 +204,17 @@ def load_source(source: ConfigSource) -> ConfigSource:
             source.marketplaces = local_data.get("marketplaces", {})
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", local_file, exc)
+
+    # Auto-detect plugin.json — if present, the source IS a plugin.
+    # local.json asPlugin can still override (e.g. to set an alias).
+    if source.as_plugin is None:
+        plugin_json_file = _find_file(source.path, _PLUGIN_JSON)
+        if plugin_json_file:
+            try:
+                plugin_meta = json.loads(plugin_json_file.read_text("utf-8"))
+                source.as_plugin = {"name": plugin_meta.get("name", source.name)}
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("Failed to load %s: %s", plugin_json_file, exc)
 
     # LSP servers (first-wins)
     lsp_file = _find_file(source.path, _LSP_SERVERS)
