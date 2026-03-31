@@ -304,20 +304,20 @@ class ShellAliasStep:
                 mkt_names_ps = ", ".join(f'"{n}"' for n in work_marketplaces)
                 mkt_keys_py = repr(list(work_marketplaces.keys()))
                 marketplace_ps_enable = (
-                    "\n    if (-not $config.marketplaces) {{ "
-                    "$config | Add-Member -NotePropertyName 'marketplaces' -NotePropertyValue ([PSCustomObject]@{{}}) }}"
+                    "\n    if (-not $config.marketplaces) { "
+                    "$config | Add-Member -NotePropertyName 'marketplaces' -NotePropertyValue ([PSCustomObject]@{}) }"
                     f"\n    $mkt = '{mkt_json}' | ConvertFrom-Json"
-                    "\n    foreach ($prop in $mkt.PSObject.Properties) {{ "
-                    "$config.marketplaces | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force }}"
+                    "\n    foreach ($prop in $mkt.PSObject.Properties) { "
+                    "$config.marketplaces | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force }"
                 )
                 marketplace_ps_changed = " -or $true"  # marketplace always needs cleanup
                 marketplace_ps_disable = (
                     f"\n            $mktNames = @({mkt_names_ps})"
-                    "\n            foreach ($mn in $mktNames) {{ $config.marketplaces.PSObject.Properties.Remove($mn) }}"
+                    "\n            foreach ($mn in $mktNames) { $config.marketplaces.PSObject.Properties.Remove($mn) }"
                 )
-                marketplace_py_enable = f"mkt = {mkt_json}\nconfig.setdefault('marketplaces', {{{{}}}}).update(mkt)\n"
+                marketplace_py_enable = f"mkt = {mkt_json}\nconfig.setdefault('marketplaces', {{}}).update(mkt)\n"
                 marketplace_py_disable = (
-                    f"for mn in {mkt_keys_py}:\n    config.get('marketplaces', {{{{}}}}).pop(mn, None)\n"
+                    f"for mn in {mkt_keys_py}:\n    config.get('marketplaces', {{}}).pop(mn, None)\n"
                 )
             else:
                 marketplace_ps_enable = ""
