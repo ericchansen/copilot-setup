@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
+import logging
 import os
 import shutil
 import subprocess
@@ -14,6 +14,8 @@ from copilotsetup.models import UIProtocol
 
 # On Windows, npm/npx/node/rustup are .cmd shims that require shell=True.
 _SHELL = sys.platform == "win32"
+
+logger = logging.getLogger(__name__)
 
 
 def _npm_needs_admin() -> bool:
@@ -33,7 +35,7 @@ def _npm_needs_admin() -> bool:
             except OSError:
                 return True
     except Exception:
-        pass
+        logger.debug("Could not check npm admin requirement", exc_info=True)
     return False
 
 
@@ -218,14 +220,16 @@ def run_optional_deps(ui: UIProtocol, lsp_json_path: Path, lsp_config_path: Path
                 if major >= 22:
                     node_ok = True
             except Exception:
-                pass
+                logger.debug("Could not determine Node.js version", exc_info=True)
         if not node_ok:
             node_ver_str = "not found"
             if node_path:
-                with contextlib.suppress(Exception):
+                try:
                     node_ver_str = subprocess.run(
                         ["node", "--version"], capture_output=True, text=True, shell=_SHELL
                     ).stdout.strip()
+                except Exception:
+                    logger.debug("Could not read Node.js version string", exc_info=True)
             ui.print_msg(f"QMD requires Node.js 22+ (current: {node_ver_str})", "warn")
             summary["optional_skipped"].append("qmd")
         else:

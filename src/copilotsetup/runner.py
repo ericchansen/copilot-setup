@@ -71,7 +71,8 @@ def run_steps(steps: list[Step], ctx: SetupContext, ui: UI) -> Summary:
                 ui.item(item.name, item.status, item.detail)
 
             summary.record(step.name, result)
-        except Exception:
+        except Exception as exc:
+            ui.item(step.name, "failed", str(exc))
             failure_result = StepResult(status="failed")
             summary.record(step.name, failure_result)
             raise
