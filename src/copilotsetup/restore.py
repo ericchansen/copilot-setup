@@ -66,9 +66,12 @@ def _build_owned_roots(repo_root: Path) -> list[str]:
             candidates.append(source.path)
             load_source(source)
         merged = merge_sources(sources)
-        candidates.extend(Path(p).expanduser() for p in merged.local_paths.values())
+        candidates.extend(Path(p).expanduser() for p in merged.local_paths.values() if p)
     except Exception:
-        logger.debug("Could not discover config sources for owned roots — using defaults")
+        logger.debug(
+            "Could not discover config sources for owned roots — using defaults",
+            exc_info=True,
+        )
 
     seen: set[str] = set()
     roots: list[str] = []
