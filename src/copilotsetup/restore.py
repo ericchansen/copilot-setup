@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from pathlib import Path
 
 from copilotsetup.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link, remove_link
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Path helpers
@@ -47,15 +50,25 @@ def _points_into_owned_root(target: Path, owned_roots: list[str]) -> bool:
 
 
 def _build_owned_roots(repo_root: Path) -> list[str]:
-    """Build the deduplicated list of filesystem roots considered 'owned' by setup."""
-    home = home_dir()
-    candidates = [
-        repo_root,
-        home / "repos" / "skills",
-        home / "repos" / "copilot-config",
-        home / "repos" / "msx-mcp",
-        repo_root / "external",
-    ]
+    """Build the deduplicated list of filesystem roots considered 'owned' by setup.
+
+    Dynamically discovers owned paths from registered config sources and local
+    plugin/server paths rather than relying on hardcoded directory names.
+    """
+    candidates: list[Path] = [repo_root, repo_root / "external"]
+
+    try:
+        from copilotsetup.sources import discover_sources, load_source, merge_sources
+
+        sources = discover_sources()
+        for source in sources:
+            candidates.append(source.path)
+            load_source(source)
+        merged = merge_sources(sources)
+        candidates.extend(Path(p).expanduser() for p in merged.local_paths.values())
+    except Exception:
+        logger.debug("Could not discover config sources for owned roots — using defaults")
+
     seen: set[str] = set()
     roots: list[str] = []
     for c in candidates:
