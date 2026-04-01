@@ -7,7 +7,10 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+
+from copilotsetup.models import UIProtocol
 
 # On Windows, npm/npx/node/rustup are .cmd shims that require shell=True.
 _SHELL = sys.platform == "win32"
@@ -34,7 +37,7 @@ def _npm_needs_admin() -> bool:
     return False
 
 
-def _npm_install_global(packages: list[str], ui) -> bool:
+def _npm_install_global(packages: list[str], ui: UIProtocol) -> bool:
     """Install npm packages globally, handling admin requirements."""
     needs_admin = _npm_needs_admin()
     if needs_admin and os.name == "nt":
@@ -89,10 +92,10 @@ _LSP_TOOLS = [
 
 
 def _offer_install(
-    ui,
+    ui: UIProtocol,
     name: str,
     description: list[str],
-    install_fn,
+    install_fn: Callable[[], bool],
     summary: dict,
     *,
     default: bool = True,
@@ -116,7 +119,7 @@ def _offer_install(
     return False
 
 
-def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: dict) -> None:
+def run_optional_deps(ui: UIProtocol, lsp_json_path: Path, lsp_config_path: Path, summary: dict) -> None:
     """Interactive optional dependency installs."""
     ui.section("Optional Dependencies")
     ui.print_msg("These tools enhance specific skills. Install now or later.", "info")
@@ -286,7 +289,7 @@ def run_optional_deps(ui, lsp_json_path: Path, lsp_config_path: Path, summary: d
         summary["lsp_skipped"] = skipped
 
 
-def _install_markitdown(ui) -> bool:
+def _install_markitdown(ui: UIProtocol) -> bool:
     """Install MarkItDown via pipx (preferred) or pip fallback. Returns True on success."""
     pipx_cmd: str | None = None
 

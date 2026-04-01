@@ -61,7 +61,7 @@ class ConfigLinksStep:
         return result
 
 
-def _find_source_label(path, sources) -> str:
+def _find_source_label(path: str, sources: list) -> str:
     """Return 'source_name: source_path' for whichever source owns *path*."""
     from pathlib import Path as P
 

@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from copilotsetup.models import UIProtocol
 from copilotsetup.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link
 
 _CONFIG_FILES = [
@@ -19,7 +20,7 @@ _CONFIG_FILES = [
 _MAX_BACKUPS = 5
 
 
-def backup_copilot_home(ui, copilot_home: Path, summary: dict) -> None:
+def backup_copilot_home(ui: UIProtocol, copilot_home: Path, summary: dict) -> None:
     """Back up ~/.copilot/ config files to a timestamped directory."""
     if not copilot_home.exists():
         ui.item("No existing ~/.copilot/", "info")
@@ -60,7 +61,7 @@ def backup_copilot_home(ui, copilot_home: Path, summary: dict) -> None:
     _cleanup_old_backups(ui, home_dir())
 
 
-def _cleanup_old_backups(ui, parent: Path) -> None:
+def _cleanup_old_backups(ui: UIProtocol, parent: Path) -> None:
     """Remove old .copilot-backup-* directories beyond the retention limit."""
     backups = sorted(
         (d for d in parent.iterdir() if d.is_dir() and d.name.startswith(".copilot-backup-")),
@@ -123,7 +124,7 @@ def _detect_onedrive() -> Path | None:
     return None
 
 
-def onedrive_backup(ui, skip_session: bool = False) -> dict:
+def onedrive_backup(ui: UIProtocol, skip_session: bool = False) -> dict:
     """Back up personalization files + session store to OneDrive."""
     summary: dict = {
         "files_copied": 0,
