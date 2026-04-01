@@ -31,6 +31,7 @@ class UIProtocol(Protocol):
     def prompt(self, msg: str, default: str = "") -> str: ...
     def section(self, text: str) -> None: ...
 
+
 # ---------------------------------------------------------------------------
 # Item-level result (one action within a step)
 # ---------------------------------------------------------------------------
