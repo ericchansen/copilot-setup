@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from copilotsetup.models import SetupContext, StepResult, Summary
+from copilotsetup.ui import UI
 
 # ---------------------------------------------------------------------------
 # Step protocol — every step must implement this
@@ -39,7 +40,7 @@ class Step(Protocol):
 # ---------------------------------------------------------------------------
 
 
-def run_steps(steps: list[Step], ctx: SetupContext, ui) -> Summary:
+def run_steps(steps: list[Step], ctx: SetupContext, ui: UI) -> Summary:
     """Execute a sequence of steps, rendering progress via *ui*.
 
     Each step is checked with :meth:`Step.check` first.  If it returns

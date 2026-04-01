@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from copilotsetup.config import json_load_safe
+from copilotsetup.models import UIProtocol
 from copilotsetup.platform_ops import create_dir_link, get_link_target, is_link, remove_link
 
 # Legacy keys to strip from .external-paths.json during cleanup
@@ -43,7 +44,7 @@ def get_skill_folders(base_path: Path) -> list[dict]:
 
 
 def link_skills(
-    ui,
+    ui: UIProtocol,
     skills: list[dict],
     copilot_skills: Path,
     non_interactive: bool,
@@ -77,7 +78,7 @@ def link_skills(
 
 
 def legacy_cleanup(
-    ui,
+    ui: UIProtocol,
     copilot_skills: Path,
     repo_root: Path,
     legacy_patterns: list[str],
@@ -133,7 +134,7 @@ def legacy_cleanup(
 # ---------------------------------------------------------------------------
 
 
-def install_plugins(ui, plugins: list[dict], local_clone_map: dict[str, Path], summary: dict) -> None:
+def install_plugins(ui: UIProtocol, plugins: list[dict], local_clone_map: dict[str, Path], summary: dict) -> None:
     """Install Copilot CLI plugins that are not yet present.
 
     Plugins whose name appears in *local_clone_map* are skipped because a
@@ -193,7 +194,7 @@ def _plugin_slug(source: str) -> str:
 
 
 def link_local_plugins(
-    ui,
+    ui: UIProtocol,
     plugins: list[dict],
     local_clone_map: dict[str, Path],
     config_json_path: Path,
@@ -303,7 +304,7 @@ _PLUGIN_LINE_RE = re.compile(
 )
 
 
-def update_plugins(ui, summary: dict) -> None:
+def update_plugins(ui: UIProtocol, summary: dict) -> None:
     """Update all installed non-local plugins."""
     if not shutil.which("copilot"):
         ui.print_msg("copilot CLI not found — skipping plugin update", "warn")
@@ -344,7 +345,7 @@ def update_plugins(ui, summary: dict) -> None:
 
 
 def cleanup_stale(
-    ui,
+    ui: UIProtocol,
     copilot_skills: Path,
     linked_names: set[str],
     repo_root: Path,
@@ -470,7 +471,7 @@ def _parse_skill_description(skill_md: Path) -> str:
 
 
 def sync_untracked_skills(
-    ui,
+    ui: UIProtocol,
     repo_skills: Path,
     copilot_skills: Path,
     non_interactive: bool = False,

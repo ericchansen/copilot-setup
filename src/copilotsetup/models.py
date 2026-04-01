@@ -10,7 +10,26 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
+
+# ---------------------------------------------------------------------------
+# UI protocol — structural type shared by UI and UIShim
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class UIProtocol(Protocol):
+    """Minimal interface for UI objects used by library functions.
+
+    Both :class:`~copilotsetup.ui.UI` and :class:`UIShim` satisfy this
+    protocol without modification.
+    """
+
+    def item(self, name: str, status: str, detail: str = "") -> None: ...
+    def print_msg(self, msg: str, status: str = "info") -> None: ...
+    def confirm(self, msg: str, default: bool = ...) -> bool: ...
+    def prompt(self, msg: str, default: str = "") -> str: ...
+    def section(self, text: str) -> None: ...
 
 # ---------------------------------------------------------------------------
 # Item-level result (one action within a step)
@@ -194,12 +213,16 @@ class UIShim:
     def print_msg(self, msg: str, status: str = "info") -> None:
         self.items.append((msg, status, ""))
 
-    def confirm(self, msg: str) -> bool:
+    def confirm(self, msg: str, default: bool = False) -> bool:
         if self._real_ui is not None:
-            return self._real_ui.confirm(msg)
-        return False
+            return self._real_ui.confirm(msg, default=default)
+        return default
 
     def prompt(self, msg: str, default: str = "") -> str:
         if self._real_ui is not None:
             return self._real_ui.prompt(msg, default=default)
         return default
+
+    def section(self, text: str) -> None:
+        if self._real_ui is not None:
+            self._real_ui.section(text)

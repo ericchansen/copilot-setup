@@ -7,6 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
+from copilotsetup.models import UIProtocol
 from copilotsetup.platform_ops import IS_WINDOWS, get_link_target, home_dir, is_link, remove_link
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ def _build_owned_roots(repo_root: Path) -> list[str]:
 
 
 def _remove_owned_links(
-    ui,
+    ui: UIProtocol,
     scan_dir: Path,
     owned_roots: list[str],
     copilot_home: Path,
@@ -128,7 +129,7 @@ def _remove_owned_links(
 # ---------------------------------------------------------------------------
 
 
-def _restore_from_backup(ui, backup_dir: Path, copilot_home: Path) -> None:
+def _restore_from_backup(ui: UIProtocol, backup_dir: Path, copilot_home: Path) -> None:
     """Copy files from *backup_dir* into *copilot_home* where they don't exist."""
     copilot_home.mkdir(parents=True, exist_ok=True)
 
@@ -166,7 +167,7 @@ def _restore_from_backup(ui, backup_dir: Path, copilot_home: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_restore(ui, repo_root: Path, non_interactive: bool = False) -> None:
+def run_restore(ui: UIProtocol, repo_root: Path, non_interactive: bool = False) -> None:
     """Remove setup-created symlinks/junctions and optionally restore from backup."""
     copilot_home = home_dir() / ".copilot"
     owned_roots = _build_owned_roots(repo_root)

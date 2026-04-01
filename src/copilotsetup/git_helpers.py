@@ -5,8 +5,10 @@ from __future__ import annotations
 import re
 import subprocess
 
+from copilotsetup.models import UIProtocol
 
-def detect_git_auth(ui, auth_state: dict) -> None:
+
+def detect_git_auth(ui: UIProtocol, auth_state: dict) -> None:
     """Detect available git authentication methods and populate *auth_state*."""
 
     # -- GitHub CLI ---------------------------------------------------------
