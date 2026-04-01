@@ -7,7 +7,7 @@ The configuration engine for GitHub Copilot CLI. Discovers, merges, and deploys 
 `copilot-setup` is a Python package that manages your Copilot CLI environment:
 
 - **Skills** — links skill directories into `~/.copilot/skills/`
-- **MCP servers** — clones, builds, and generates `mcp-config.json`
+- **MCP servers** — builds and generates `mcp-config.json`
 - **LSP servers** — validates binaries and generates `lsp-config.json`
 - **Plugins** — installs Copilot CLI plugins and creates shell aliases
 - **Config files** — symlinks instructions, patches `config.json`
@@ -82,16 +82,20 @@ python -m pytest tests/ -v
 ## Project Structure
 
 ```
-copilot_setup/          ← Step-based pipeline
-  models.py             ← SetupContext, StepResult, Summary
+src/copilotsetup/
+  cli.py                ← CLI entry point (copilot-setup command)
+  models.py             ← SetupContext, StepResult, Summary, UIProtocol
   runner.py             ← Step protocol + pipeline runner
-  steps/                ← 16 individual setup steps
-lib/
+  ui.py                 ← Terminal UI rendering
   sources.py            ← Config source discovery & merging
   config.py             ← MCP/LSP config generation
-  skills.py             ← Skill discovery, linking, sync
+  skills.py             ← Skill discovery, linking, plugin management
   platform_ops.py       ← Cross-platform symlinks, junctions
-  ui.py                 ← Terminal UI
-  backup.py             ← Backup/restore
-setup.py                ← CLI entry point
+  backup.py             ← Backup & OneDrive sync
+  restore.py            ← Restore from backup
+  git_helpers.py        ← Git authentication detection
+  optional_deps.py      ← Interactive optional dependency installs
+  build_detect.py       ← Build system detection for MCP servers
+  init.py               ← Onboarding wizard (copilot-setup init)
+  steps/                ← 15 individual setup steps
 ```
