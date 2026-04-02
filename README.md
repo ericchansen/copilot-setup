@@ -31,7 +31,7 @@ Each source is a directory containing any combination of:
 
 | File | Purpose | Merge Strategy |
 |------|---------|----------------|
-| `mcp-servers.json` | MCP server definitions | **Additive** — merged across all sources |
+| `mcp.json` | MCP server definitions | **Additive** — merged across all sources |
 | `plugins.json` | Copilot CLI plugin definitions | **Additive** — merged across all sources |
 | `lsp-servers.json` | LSP server definitions | **First-wins** — first source providing it |
 | `config.portable.json` | Portable settings | **First-wins** |
@@ -75,8 +75,14 @@ pip install -e .
 # Lint
 python -m ruff check .
 
+# Format check
+python -m ruff format --check .
+
 # Test
 python -m pytest tests/ -v
+
+# All three (must pass before committing)
+python -m ruff check . && python -m ruff format --check . && python -m pytest tests/ -v
 ```
 
 ## Project Structure
