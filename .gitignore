@@ -17,3 +17,6 @@ __pycache__/
 Thumbs.db
 
 *.egg-info/
+
+# Ruff
+.ruff_cache/
