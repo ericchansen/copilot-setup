@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from copilotsetup.models import SetupContext, StepResult, UIShim
-from copilotsetup.platform_ops import is_link, normalize_path, remove_link
+from copilotsetup.platform_ops import IS_WINDOWS, is_link, normalize_path, remove_link
 from copilotsetup.skills import get_skill_folders, link_skills
 from copilotsetup.sources import ConfigSource
+
+
+def _under_prefix(path: str, prefix: str) -> bool:
+    """Check if *path* is equal to or a child of *prefix* using a separator boundary."""
+    prefix_sep = prefix if prefix.endswith("/") else prefix + "/"
+    if IS_WINDOWS:
+        return path.lower() == prefix.lower() or path.lower().startswith(prefix_sep.lower())
+    return path == prefix or path.startswith(prefix_sep)
 
 
 class SkillsStep:
@@ -38,7 +46,7 @@ class SkillsStep:
                     for entry in skills_dir.iterdir():
                         if is_link(entry):
                             target = normalize_path(str(entry.resolve()))
-                            if any(target.startswith(prefix) for prefix in plugin_paths):
+                            if any(_under_prefix(target, prefix) for prefix in plugin_paths):
                                 remove_link(entry)
                                 result.item(entry.name, "success", "removed — now handled by plugin")
 
