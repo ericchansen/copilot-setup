@@ -35,8 +35,8 @@ def ensure_dir(path: Path) -> None:
 def normalize_path(p: str) -> str:
     """Expand and normalize a path string for comparison.
 
-    Resolves ``~``, symlinks/junctions, and 8.3 short names, then returns
-    a forward-slash string with no trailing separator.
+    Expands ``~``, resolves the path, and returns a forward-slash string
+    with no trailing separator.
     """
     return str(Path(p).expanduser().resolve()).replace("\\", "/").rstrip("/")
 
