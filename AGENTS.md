@@ -23,6 +23,11 @@ all data (servers, plugins, skills, instructions) comes from config source repos
 - **Legacy support**: Sources using `.copilot/` subdir layout are auto-detected
 - **Platform ops**: Windows junctions require special handling — always use `platform_ops.is_link()` / `remove_link()`, never `is_symlink()` / `unlink()` directly
 - **Path prefix matching**: Always use separator-boundary checks (append `/` before `startswith`) to prevent `/agency` matching `/agency2`. See `_under_prefix()` in `plugin_disable.py` and `_points_into_owned_root()` in `restore.py`
+- **Agency naming**: When an MCP server overlaps with an Agency built-in, use Agency's
+  name so dedup works (e.g., `msft-learn` not `microsoft-learn`). Agency built-in names:
+  `ado`, `bluebird`, `cloudbuild`, `es-chat`, `icm`, `kusto`, `local`, `m365-copilot`,
+  `m365-user`, `mail`, `calendar`, `msft-learn`, `npx`, `planner`, `remote`,
+  `security-context`, `teams`, `word`, `workiq`
 
 ## File Conventions
 
