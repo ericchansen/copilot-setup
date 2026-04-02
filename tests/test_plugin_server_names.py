@@ -45,7 +45,6 @@ def _make_ctx(
         external_dir=root / "external",
         repo_copilot=root / ".copilot",
         repo_skills=root / ".copilot" / "skills",
-        mcp_servers_json=Path("__merged__"),
         lsp_servers_json=Path("__merged__"),
         portable_json=Path("__none__"),
         args=args,

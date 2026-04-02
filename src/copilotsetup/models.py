@@ -74,14 +74,6 @@ class StepResult:
     def has_failures(self) -> bool:
         return any(i.status == "failed" for i in self.items)
 
-    @property
-    def created(self) -> list[ItemResult]:
-        return [i for i in self.items if i.status == "created"]
-
-    @property
-    def failed(self) -> list[ItemResult]:
-        return [i for i in self.items if i.status == "failed"]
-
 
 # ---------------------------------------------------------------------------
 # Git auth state
@@ -118,7 +110,6 @@ class SetupContext:
     external_dir: Path
     repo_copilot: Path
     repo_skills: Path
-    mcp_servers_json: Path
     lsp_servers_json: Path
     portable_json: Path
 
@@ -174,9 +165,6 @@ class Summary:
     def all_items(self) -> list[ItemResult]:
         """Flatten all items across all steps."""
         return [item for r in self.steps.values() for item in r.items]
-
-    def items_by_status(self, status: Status) -> list[ItemResult]:
-        return [i for i in self.all_items if i.status == status]
 
     def step_items(self, step_name: str) -> list[ItemResult]:
         """Get items for a specific step."""

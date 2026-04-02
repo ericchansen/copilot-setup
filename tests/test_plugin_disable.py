@@ -5,17 +5,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from copilotsetup.steps.plugin_disable import PluginDisableStep, _normalize, _under_prefix
+from copilotsetup.platform_ops import normalize_path
+from copilotsetup.steps.plugin_disable import PluginDisableStep, _under_prefix
 
 
-class TestNormalize:
+class TestNormalizePath:
     def test_expands_home(self):
-        result = _normalize("~/repos/agency-cowork")
+        result = normalize_path("~/repos/agency-cowork")
         assert "~" not in result
         assert result.endswith("repos/agency-cowork")
 
     def test_strips_trailing_slash(self):
-        result = _normalize("/tmp/foo/")
+        result = normalize_path("/tmp/foo/")
         assert not result.endswith("/")
 
 

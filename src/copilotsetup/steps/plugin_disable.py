@@ -4,16 +4,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 from copilotsetup.config import json_load_safe
 from copilotsetup.models import SetupContext, StepResult
-from copilotsetup.platform_ops import IS_WINDOWS
-
-
-def _normalize(p: str) -> str:
-    """Expand and normalize a path string for prefix matching."""
-    return str(Path(p).expanduser().resolve()).replace("\\", "/").rstrip("/")
+from copilotsetup.platform_ops import IS_WINDOWS, normalize_path
 
 
 def _under_prefix(path: str, prefix: str) -> bool:
@@ -103,7 +97,7 @@ class PluginDisableStep:
                         break
 
         # ── 2. Disable plugins by path prefix ────────────────────────
-        prefixes = [_normalize(p) for p in merged.disable_plugin_paths]
+        prefixes = [normalize_path(p) for p in merged.disable_plugin_paths]
         disabled_names: list[str] = []
         already_disabled: list[str] = []
 
@@ -114,7 +108,7 @@ class PluginDisableStep:
                 cache_path = entry.get("cache_path", "")
                 if not cache_path:
                     continue
-                norm_cache = _normalize(cache_path)
+                norm_cache = normalize_path(cache_path)
                 if any(_under_prefix(norm_cache, prefix) for prefix in prefixes):
                     name = entry.get("name", "unknown")
                     if entry.get("enabled", True):

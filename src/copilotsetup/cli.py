@@ -177,7 +177,6 @@ def _run_setup(args: argparse.Namespace) -> None:
         external_dir=external_dir,
         repo_copilot=merged.instructions.parent if merged.instructions else copilot_home,
         repo_skills=merged.skill_dirs[0] if merged.skill_dirs else copilot_home / "skills",
-        mcp_servers_json=Path("__merged__"),  # servers come from merged.servers, not a file
         lsp_servers_json=Path("__merged__"),  # LSP comes from merged.lsp_servers
         portable_json=merged.portable_config or Path("__none__"),
         args=args,

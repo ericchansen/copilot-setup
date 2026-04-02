@@ -32,6 +32,15 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def normalize_path(p: str) -> str:
+    """Expand and normalize a path string for comparison.
+
+    Resolves ``~``, symlinks/junctions, and 8.3 short names, then returns
+    a forward-slash string with no trailing separator.
+    """
+    return str(Path(p).expanduser().resolve()).replace("\\", "/").rstrip("/")
+
+
 def _resolve_paths_match(a: Path, b: Path) -> bool:
     """Compare two paths for equality after resolving (case-insensitive on Windows).
 
