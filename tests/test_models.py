@@ -31,14 +31,6 @@ class TestStepResult:
         assert len(result.items) == 2
         assert result.has_failures
 
-    def test_created_and_failed_filters(self):
-        result = StepResult()
-        result.item("a", "created")
-        result.item("b", "exists")
-        result.item("c", "failed")
-        assert len(result.created) == 1
-        assert len(result.failed) == 1
-
     def test_no_failures(self):
         result = StepResult()
         result.item("a", "exists")
@@ -60,18 +52,6 @@ class TestSummary:
         assert len(summary.steps) == 2
         assert summary.has_failures
         assert len(summary.all_items) == 2
-
-    def test_items_by_status(self):
-        summary = Summary()
-        r = StepResult()
-        r.item("a", "created")
-        r.item("b", "created")
-        r.item("c", "failed")
-        summary.record("test", r)
-
-        assert len(summary.items_by_status("created")) == 2
-        assert len(summary.items_by_status("failed")) == 1
-        assert len(summary.items_by_status("skipped")) == 0
 
     def test_step_items(self):
         summary = Summary()

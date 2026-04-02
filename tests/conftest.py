@@ -55,7 +55,6 @@ def setup_ctx(tmp_repo: Path, copilot_home: Path, default_args: argparse.Namespa
         external_dir=tmp_repo / "external",
         repo_copilot=tmp_repo / ".copilot",
         repo_skills=tmp_repo / ".copilot" / "skills",
-        mcp_servers_json=tmp_repo / "mcp-servers.json",
         lsp_servers_json=tmp_repo / "lsp-servers.json",
         portable_json=tmp_repo / ".copilot" / "config.portable.json",
         args=default_args,
