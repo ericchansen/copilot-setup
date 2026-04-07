@@ -42,9 +42,15 @@ class McpConfigStep:
                     names = ", ".join(sorted(contributing))
                     result.item(f"[{source.name}]", "info", f"servers: {names}")
 
-        generate_mcp_config(config_servers, ctx.mcp_paths, ctx.external_dir, mcp_config_path)
+        info = generate_mcp_config(config_servers, ctx.mcp_paths, ctx.external_dir, mcp_config_path)
 
         result.item("mcp-config.json", "success", f"{len(config_servers)} servers")
+        if info.get("preserved"):
+            names = ", ".join(sorted(info["preserved"]))
+            result.item("User-added", "info", f"preserved: {names}")
+        if info.get("overridden"):
+            names = ", ".join(sorted(info["overridden"]))
+            result.item("Overridden", "warn", f"managed replaced user entry: {names}")
         if ctx.plugin_managed_names:
             managed = ", ".join(sorted(ctx.plugin_managed_names))
             result.item("Plugin-managed", "info", f"{managed} (via plugin .mcp.json)")

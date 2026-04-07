@@ -60,6 +60,8 @@ def _build_mcp_entry(name: str, entry: dict, mcp_paths: dict, external_dir: Path
         result: dict = {"type": "http", "url": entry["url"]}
         if entry.get("headers"):
             result["headers"] = entry["headers"]
+        if entry.get("env"):
+            result["env"] = entry["env"]
         result["tools"] = entry.get("tools", ["*"])
         return result
 
@@ -80,7 +82,10 @@ def _build_mcp_entry(name: str, entry: dict, mcp_paths: dict, external_dir: Path
                 resolved_args.append(arg)
         args = resolved_args
 
-    return {"type": "local", "command": command, "args": args, "tools": tools}
+    result = {"type": "local", "command": command, "args": args, "tools": tools}
+    if entry.get("env"):
+        result["env"] = entry["env"]
+    return result
 
 
 def generate_mcp_config(
@@ -88,20 +93,57 @@ def generate_mcp_config(
     mcp_paths: dict,
     external_dir: Path,
     output_path: Path,
-) -> None:
-    """Write ``~/.copilot/mcp-config.json`` from the enabled server dict."""
+) -> dict[str, list[str]]:
+    """Write ``~/.copilot/mcp-config.json`` from the enabled server dict.
+
+    User-added servers (names not in *servers*) are preserved from the
+    existing config file.  Managed servers always take precedence.
+
+    Returns a dict with ``"preserved"`` and ``"overridden"`` server name
+    lists for downstream reporting.
+    """
+    info: dict[str, list[str]] = {"preserved": [], "overridden": []}
+
+    # Read existing config before any destructive operations
+    existing = json_load_safe(output_path)
+    existing_servers: dict = {}
+    if isinstance(existing.get("mcpServers"), dict):
+        existing_servers = existing["mcpServers"]
+
     # Remove legacy symlink/junction if present
     if is_link(output_path):
         output_path.unlink()
 
-    mcp_servers: dict = {}
+    # Build managed servers
+    managed: dict = {}
+    managed_names: set[str] = set(servers)
     for name, entry in servers.items():
-        mcp_servers[name] = _build_mcp_entry(name, entry, mcp_paths, external_dir)
+        managed[name] = _build_mcp_entry(name, entry, mcp_paths, external_dir)
+
+    # Preserve user-added servers (names not managed by any source)
+    user_servers: dict = {}
+    for name, entry in existing_servers.items():
+        if name in managed_names:
+            # Managed server overrides — warn only if the existing entry
+            # looks different (i.e., user may have customized it)
+            if entry != managed[name]:
+                info["overridden"].append(name)
+        else:
+            user_servers[name] = entry
+            info["preserved"].append(name)
+
+    # Merge: managed first, then user-added
+    mcp_servers = {**managed, **user_servers}
+
+    # Preserve other top-level keys from the existing config
+    output: dict = {k: v for k, v in existing.items() if k != "mcpServers"}
+    output["mcpServers"] = mcp_servers
 
     output_path.write_text(
-        json.dumps({"mcpServers": mcp_servers}, indent=2) + "\n",
+        json.dumps(output, indent=2) + "\n",
         "utf-8",
     )
+    return info
 
 
 # ---------------------------------------------------------------------------
