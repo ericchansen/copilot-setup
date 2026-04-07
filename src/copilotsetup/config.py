@@ -10,7 +10,7 @@ from copilotsetup.platform_ops import is_link, validate_lsp_binary
 
 
 def json_load_safe(path: Path) -> dict:
-    """Load JSON from *path*, returning {} on missing file or parse error."""
+    """Load JSON from *path*, returning {} on missing file, parse error, or read error."""
     if not path.exists():
         return {}
     try:
