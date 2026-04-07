@@ -6,7 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
-from copilotsetup.platform_ops import is_link, validate_lsp_binary
+from copilotsetup.platform_ops import is_link, remove_link, validate_lsp_binary
 
 
 def json_load_safe(path: Path) -> dict:
@@ -122,7 +122,7 @@ def generate_mcp_config(
 
     # Remove legacy symlink/junction if present
     if is_link(output_path):
-        output_path.unlink()
+        remove_link(output_path)
 
     # Build managed servers
     managed: dict = {}
@@ -195,7 +195,7 @@ def generate_lsp_config(
 
     # Remove stale symlink at output path if present
     if is_link(output_path):
-        output_path.unlink()
+        remove_link(output_path)
 
     output_path.write_text(
         json.dumps({"lspServers": included}, indent=2) + "\n",
