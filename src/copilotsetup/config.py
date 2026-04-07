@@ -112,17 +112,20 @@ def generate_mcp_config(
     info: dict[str, list[str]] = {"preserved": [], "overridden": []}
     exclude = exclude_names or set()
 
-    # Read existing config before any destructive operations
-    existing = json_load_safe(output_path)
+    # Read existing config before any destructive operations.
+    # If the path is a link (legacy junction), resolve the target and only
+    # read when it points to a regular file — avoids blocking on devices/pipes.
+    if is_link(output_path):
+        target = output_path.resolve()
+        existing = json_load_safe(target) if target.is_file() else {}
+        remove_link(output_path)
+    else:
+        existing = json_load_safe(output_path)
     if not isinstance(existing, dict):
         existing = {}
     existing_servers: dict = {}
     if isinstance(existing.get("mcpServers"), dict):
         existing_servers = existing["mcpServers"]
-
-    # Remove legacy symlink/junction if present
-    if is_link(output_path):
-        remove_link(output_path)
 
     # Build managed servers
     managed: dict = {}
