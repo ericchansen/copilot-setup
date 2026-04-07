@@ -42,7 +42,13 @@ class McpConfigStep:
                     names = ", ".join(sorted(contributing))
                     result.item(f"[{source.name}]", "info", f"servers: {names}")
 
-        info = generate_mcp_config(config_servers, ctx.mcp_paths, ctx.external_dir, mcp_config_path)
+        info = generate_mcp_config(
+            config_servers,
+            ctx.mcp_paths,
+            ctx.external_dir,
+            mcp_config_path,
+            exclude_names=ctx.plugin_managed_names,
+        )
 
         result.item("mcp-config.json", "success", f"{len(config_servers)} servers")
         if info.get("preserved"):

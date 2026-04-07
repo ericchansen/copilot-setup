@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from copilotsetup.config import generate_mcp_config
 
 
@@ -210,3 +212,61 @@ class TestUserServerWithEnv:
             "ZOTERO_API_KEY": "secret",
             "ZOTERO_LIBRARY_ID": "1276304",
         }
+
+
+class TestExcludeNames:
+    """Plugin-managed servers should not be preserved from existing config."""
+
+    def test_excluded_names_not_preserved(self, tmp_path: Path) -> None:
+        output = tmp_path / "mcp-config.json"
+        _write_mcp_config(
+            output,
+            {
+                "plugin-server": {"type": "local", "command": "plugin-mcp", "args": [], "tools": ["*"]},
+                "user-zotero": {"type": "local", "command": "zotero-mcp", "args": [], "tools": ["*"]},
+            },
+        )
+
+        managed = {"azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]}}
+        info = generate_mcp_config(managed, {}, tmp_path, output, exclude_names={"plugin-server"})
+
+        result = _read_mcp_config(output)
+        assert "azure-mcp" in result
+        assert "user-zotero" in result
+        assert "plugin-server" not in result
+        assert info["preserved"] == ["user-zotero"]
+
+    def test_empty_exclude_names(self, tmp_path: Path) -> None:
+        output = tmp_path / "mcp-config.json"
+        _write_mcp_config(
+            output,
+            {"user-srv": {"type": "local", "command": "srv", "args": [], "tools": ["*"]}},
+        )
+
+        managed = {"azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]}}
+        info = generate_mcp_config(managed, {}, tmp_path, output, exclude_names=set())
+
+        result = _read_mcp_config(output)
+        assert "user-srv" in result
+        assert info["preserved"] == ["user-srv"]
+
+
+class TestSymlinkToDirectory:
+    """Symlink pointing to a directory should not crash json_load_safe."""
+
+    def test_symlink_to_dir_handled(self, tmp_path: Path) -> None:
+        target_dir = tmp_path / "some-dir"
+        target_dir.mkdir()
+        output = tmp_path / "mcp-config.json"
+        try:
+            output.symlink_to(target_dir)
+        except OSError:
+            pytest.skip("symlink creation not supported")
+
+        managed = {"azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]}}
+        info = generate_mcp_config(managed, {}, tmp_path, output)
+
+        # Should not crash — symlink is unlinked and file written
+        result = _read_mcp_config(output)
+        assert "azure-mcp" in result
+        assert info["preserved"] == []
