@@ -108,6 +108,17 @@ class TestUserServerPreservation:
         assert "azure-mcp" in result
         assert info["preserved"] == []
 
+    def test_top_level_non_object_json(self, tmp_path: Path) -> None:
+        output = tmp_path / "mcp-config.json"
+        output.write_text(json.dumps(["not", "an", "object"]), "utf-8")
+
+        managed = {"azure-mcp": {"command": "npx", "args": ["-y", "@azure/mcp@latest"]}}
+        info = generate_mcp_config(managed, {}, tmp_path, output)
+
+        result = _read_mcp_config(output)
+        assert "azure-mcp" in result
+        assert info["preserved"] == []
+
 
 class TestEnvPreservation:
     """The env field should be preserved in generated entries."""
