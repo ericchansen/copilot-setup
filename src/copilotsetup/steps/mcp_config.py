@@ -50,7 +50,7 @@ class McpConfigStep:
             result.item("User-added", "info", f"preserved: {names}")
         if info.get("overridden"):
             names = ", ".join(sorted(info["overridden"]))
-            result.item("Overridden", "warn", f"managed replaced user entry: {names}")
+            result.item("Overridden", "warn", f"managed replaced existing entry: {names}")
         if ctx.plugin_managed_names:
             managed = ", ".join(sorted(ctx.plugin_managed_names))
             result.item("Plugin-managed", "info", f"{managed} (via plugin .mcp.json)")

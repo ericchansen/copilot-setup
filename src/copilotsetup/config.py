@@ -106,6 +106,8 @@ def generate_mcp_config(
 
     # Read existing config before any destructive operations
     existing = json_load_safe(output_path)
+    if not isinstance(existing, dict):
+        existing = {}
     existing_servers: dict = {}
     if isinstance(existing.get("mcpServers"), dict):
         existing_servers = existing["mcpServers"]
