@@ -15,7 +15,7 @@ def json_load_safe(path: Path) -> dict:
         return {}
     try:
         return json.loads(path.read_text("utf-8"))
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return {}
 
 
@@ -93,16 +93,24 @@ def generate_mcp_config(
     mcp_paths: dict,
     external_dir: Path,
     output_path: Path,
+    *,
+    exclude_names: set[str] | None = None,
 ) -> dict[str, list[str]]:
     """Write ``~/.copilot/mcp-config.json`` from the enabled server dict.
 
-    User-added servers (names not in *servers*) are preserved from the
-    existing config file.  Managed servers always take precedence.
+    User-added servers (names not in *servers* and not in *exclude_names*)
+    are preserved from the existing config file.  Managed servers always
+    take precedence.
+
+    Args:
+        exclude_names: Additional server names to exclude from preservation
+            (e.g., plugin-managed servers whose config comes from elsewhere).
 
     Returns a dict with ``"preserved"`` and ``"overridden"`` server name
     lists for downstream reporting.
     """
     info: dict[str, list[str]] = {"preserved": [], "overridden": []}
+    exclude = exclude_names or set()
 
     # Read existing config before any destructive operations
     existing = json_load_safe(output_path)
@@ -122,7 +130,7 @@ def generate_mcp_config(
     for name, entry in servers.items():
         managed[name] = _build_mcp_entry(name, entry, mcp_paths, external_dir)
 
-    # Preserve user-added servers (names not managed by any source)
+    # Preserve user-added servers (names not managed by any source and not excluded)
     user_servers: dict = {}
     for name, entry in existing_servers.items():
         if name in managed_names:
@@ -130,6 +138,8 @@ def generate_mcp_config(
             # looks different (i.e., user may have customized it)
             if entry != managed[name]:
                 info["overridden"].append(name)
+        elif name in exclude:
+            pass  # plugin-managed or otherwise excluded — don't preserve
         else:
             user_servers[name] = entry
             info["preserved"].append(name)
