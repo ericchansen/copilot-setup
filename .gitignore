@@ -20,3 +20,6 @@ Thumbs.db
 
 # Ruff
 .ruff_cache/
+
+# Playwright MCP artifacts
+.playwright-mcp/

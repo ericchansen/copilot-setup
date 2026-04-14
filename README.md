@@ -9,7 +9,7 @@ The configuration engine for GitHub Copilot CLI. Discovers, merges, and deploys 
 - **Skills** — links skill directories into `~/.copilot/skills/`
 - **MCP servers** — builds and generates `mcp-config.json`
 - **LSP servers** — validates binaries and generates `lsp-config.json`
-- **Plugins** — installs Copilot CLI plugins and creates shell aliases
+- **Plugins** — installs Copilot CLI plugins
 - **Config files** — symlinks instructions, patches `config.json`
 
 ## Multi-Source Architecture

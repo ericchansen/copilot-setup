@@ -6,7 +6,7 @@ A config source is a directory with a standard ``.copilot/`` layout::
       .copilot/
         mcp.json                  ← standard mcpServers format
         plugins.json              ← plugins to install (committed, sharable)
-        local.json                ← gitignored: local paths, extra plugins, aliases
+        local.json                ← gitignored: local paths, extra plugins
         copilot-instructions.md   ← global instructions
         config.portable.json      ← portable Copilot settings
         lsp-servers.json          ← LSP server definitions
@@ -62,10 +62,8 @@ class ConfigSource:
     servers: dict[str, dict] = field(default_factory=dict)  # standard mcpServers format
     disabled_by_default: set[str] = field(default_factory=set)  # server names with disabledByDefault
     local_paths: dict[str, str] = field(default_factory=dict)  # server → local dev path
-    plugins: dict[str, dict] = field(default_factory=dict)  # server → {source, alias}
-    disable_plugin_paths: list[str] = field(default_factory=list)  # paths to disable plugins by
-    as_plugin: dict | None = None  # {"name": "...", "alias": "..."} — register source as plugin
-    marketplaces: dict[str, dict] = field(default_factory=dict)  # marketplace definitions
+    plugins: dict[str, dict] = field(default_factory=dict)  # server → {source}
+    as_plugin: dict | None = None  # {"name": "..."} — register source as plugin
     lsp_servers: dict | None = None
     lsp_servers_path: Path | None = None
     portable_config: Path | None = None
@@ -89,10 +87,8 @@ class MergedConfig:
     servers: dict[str, dict] = field(default_factory=dict)  # name → standard entry
     disabled_by_default: set[str] = field(default_factory=set)  # servers to exclude from enabled
     local_paths: dict[str, str] = field(default_factory=dict)  # server → local dev path
-    plugins: dict[str, dict] = field(default_factory=dict)  # server → {source, alias}
-    disable_plugin_paths: list[str] = field(default_factory=list)  # paths to disable plugins by
+    plugins: dict[str, dict] = field(default_factory=dict)  # server → {source}
     source_plugins: list[dict] = field(default_factory=list)  # sources registered as plugins
-    marketplaces: dict[str, dict] = field(default_factory=dict)  # work-only marketplaces to manage
     lsp_servers: dict | None = None
     lsp_servers_path: Path | None = None
     portable_config: Path | None = None
@@ -199,16 +195,14 @@ def load_source(source: ConfigSource) -> ConfigSource:
                 for name, info in plugins_value.items():
                     if name not in source.plugins:
                         source.plugins[name] = info
-            source.disable_plugin_paths = local_data.get("disablePluginsByPath", [])
             source.as_plugin = local_data.get("asPlugin")
-            source.marketplaces = local_data.get("marketplaces", {})
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load %s: %s", local_file, exc)
 
     # Auto-detect plugin.json — if present, the source IS a plugin.
     # Only check .copilot/plugin.json (not root) to avoid false positives
     # from npm or other ecosystems that also use root-level plugin.json.
-    # local.json asPlugin can still override (e.g. to set an alias).
+    # local.json asPlugin can still override (e.g. to set a name).
     if source.as_plugin is None:
         plugin_json_file = source.copilot_dir / _PLUGIN_JSON
         if plugin_json_file.is_file():
@@ -282,14 +276,6 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
             if name not in merged.plugins:
                 merged.plugins[name] = plugin
 
-        # Additive: disable-plugin paths
-        merged.disable_plugin_paths.extend(source.disable_plugin_paths)
-
-        # Additive: marketplaces (first occurrence of each name wins)
-        for name, marketplace in source.marketplaces.items():
-            if name not in merged.marketplaces:
-                merged.marketplaces[name] = marketplace
-
         # Source-as-plugin: register and skip skill_dir linking
         if source.as_plugin:
             # Determine the plugin directory (.copilot/ dir)
@@ -302,7 +288,6 @@ def merge_sources(sources: list[ConfigSource]) -> MergedConfig:
             merged.source_plugins.append(
                 {
                     "name": source.as_plugin.get("name", source.name),
-                    "alias": source.as_plugin.get("alias", ""),
                     "path": str(plugin_dir),
                 }
             )
