@@ -18,7 +18,7 @@ from copilotsetup.steps.plugins import PluginsStep
 _MSX_SERVER_ENTRY = {"command": "node", "args": ["dist/index.js"]}
 
 # Plugin info (as it would appear in local.json)
-_MSX_PLUGIN_INFO = {"source": "mcaps-microsoft/MSX-MCP", "alias": "copilot-msx"}
+_MSX_PLUGIN_INFO = {"source": "mcaps-microsoft/MSX-MCP"}
 
 
 @dataclass

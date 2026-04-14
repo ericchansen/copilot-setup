@@ -46,7 +46,7 @@ class PluginsStep:
         # Install all declared plugins. Previously this was gated on enabled_servers,
         # but plugins.json is an explicit declaration — install them all.
         plugins_to_install = [
-            {"name": name, "source": info.get("source", ""), "localServerName": name, "alias": info.get("alias", "")}
+            {"name": name, "source": info.get("source", ""), "localServerName": name}
             for name, info in all_plugins.items()
             if info.get("source")
         ]

@@ -42,4 +42,5 @@ class CleanupStep:
 
         for name, status, detail in shim.items:
             result.item(name, status, detail)
+
         return result

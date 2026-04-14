@@ -167,17 +167,6 @@ def install_plugins(ui: UIProtocol, plugins: list[dict], local_clone_map: dict[s
         if result is not None:
             ui.item(name, "created", f"installed from {source}")
             summary["plugins_installed"].append(name)
-            # Disable-by-default for alias plugins (opt-in via shell alias)
-            if plugin.get("alias"):
-                disable_result = _run_copilot(["plugin", "disable", name], check=False)
-                if disable_result is not None:
-                    ui.print_msg(f"disabled by default — use '{plugin['alias']}' alias to opt in", "info")
-                else:
-                    ui.item(
-                        name,
-                        "warn",
-                        f"could not disable automatically — run 'copilot plugin disable {name}' if needed",
-                    )
         else:
             ui.item(name, "failed", f"install failed for {source}")
             summary["plugins_failed"].append(name)
@@ -266,7 +255,7 @@ def link_local_plugins(
                     "marketplace": "",
                     "version": version,
                     "installed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                    "enabled": not bool(plugin.get("alias")),
+                    "enabled": True,
                     "cache_path": str(junction_path),
                     "source": {"source": "github", "repo": source},
                 }
