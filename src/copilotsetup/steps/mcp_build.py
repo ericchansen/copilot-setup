@@ -28,10 +28,7 @@ class McpBuildStep:
 
         # Compute plugin-managed names (servers with plugins confirmed in plugin step)
         plugin_server_names = getattr(ctx, "plugin_server_names", set())
-        local_clone_map: dict[str, Path] = getattr(ctx, "local_clone_map", {})
-        ctx.plugin_managed_names = {
-            name for name in enabled if name in plugin_server_names and name not in local_clone_map
-        }
+        ctx.plugin_managed_names = {name for name in enabled if name in plugin_server_names}
 
         # Load stored paths from previous runs
         mcp_paths_file = ctx.copilot_home / ".mcp-paths.json"
