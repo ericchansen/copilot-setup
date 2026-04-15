@@ -99,7 +99,7 @@ class SetupContext:
     """Immutable-ish bag of paths, flags, and shared state for the pipeline.
 
     Created once at the start of setup and threaded through every step.
-    Steps may mutate ``local_clone_map`` and ``plugin_managed_names``
+    Steps may mutate ``plugin_managed_names``
     for downstream steps to consume.
     """
 
@@ -124,7 +124,6 @@ class SetupContext:
     auth_state: GitAuthState = field(default_factory=GitAuthState)
 
     # Cross-step shared state (populated by steps for downstream consumers)
-    local_clone_map: dict[str, Path] = field(default_factory=dict)
     plugin_managed_names: set[str] = field(default_factory=set)
     plugin_server_names: set[str] = field(default_factory=set)
     plugins_to_install: list[dict] = field(default_factory=list)

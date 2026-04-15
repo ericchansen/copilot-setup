@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from copilotsetup.models import SetupContext, StepResult, UIShim
-from copilotsetup.skills import install_plugins, link_local_plugins
+from copilotsetup.skills import install_plugins
 
 
 class PluginsStep:
-    """Install Copilot CLI plugins and register local clones."""
+    """Install Copilot CLI plugins."""
 
     name = "Skills · Plugins"
 
@@ -24,7 +22,6 @@ class PluginsStep:
         # Plugins come from local.json in config sources
         merged = getattr(ctx, "merged_config", None)
         all_plugins = merged.plugins if merged else {}
-        local_paths = merged.local_paths if merged else {}
 
         # Show where plugins are defined (respecting first-wins merge semantics)
         if all_plugins and merged:
@@ -55,23 +52,8 @@ class PluginsStep:
             result.item("Plugins", "info", "no plugin sources defined")
             return result
 
-        # Resolve local clones using local_paths from local.json
-        local_clone_map: dict[str, Path] = {}
-        for plugin in plugins_to_install:
-            server_name = plugin["localServerName"]
-            local_path = local_paths.get(server_name)
-            if not local_path:
-                continue
-            candidate = Path(local_path).expanduser()
-            if candidate.is_dir() and (candidate / ".git").is_dir():
-                local_clone_map[plugin["name"]] = candidate
+        install_plugins(shim, plugins_to_install, shim_summary)
 
-        install_plugins(shim, plugins_to_install, local_clone_map, shim_summary)
-
-        if local_clone_map:
-            link_local_plugins(shim, plugins_to_install, local_clone_map, ctx.config_json, shim_summary)
-
-        ctx.local_clone_map = local_clone_map
         ctx.plugins_to_install = plugins_to_install
 
         # Only mark servers as plugin-managed when the plugin is confirmed
@@ -79,7 +61,7 @@ class PluginsStep:
         ctx.plugin_server_names = {
             p["localServerName"]
             for p in plugins_to_install
-            if p.get("localServerName") and (p["name"] in confirmed_plugin_names or p["name"] in local_clone_map)
+            if p.get("localServerName") and p["name"] in confirmed_plugin_names
         }
 
         for name, status, detail in shim.items:

@@ -8,7 +8,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from copilotsetup.config import json_load_safe
 from copilotsetup.models import UIProtocol
 from copilotsetup.platform_ops import create_dir_link, get_link_target, is_link, remove_link
 
@@ -134,13 +133,8 @@ def legacy_cleanup(
 # ---------------------------------------------------------------------------
 
 
-def install_plugins(ui: UIProtocol, plugins: list[dict], local_clone_map: dict[str, Path], summary: dict) -> None:
-    """Install Copilot CLI plugins that are not yet present.
-
-    Plugins whose name appears in *local_clone_map* are skipped because a
-    local development clone was detected (local-clone-wins pattern).  Their
-    skills and agents are linked separately by :func:`link_local_plugins`.
-    """
+def install_plugins(ui: UIProtocol, plugins: list[dict], summary: dict) -> None:
+    """Install Copilot CLI plugins that are not yet present."""
     if not shutil.which("copilot"):
         ui.print_msg("copilot CLI not found — skipping plugin install", "warn")
         return
@@ -151,12 +145,6 @@ def install_plugins(ui: UIProtocol, plugins: list[dict], local_clone_map: dict[s
     for plugin in plugins:
         name = plugin["name"]
         source = plugin["source"]
-
-        # Local-clone-wins: skip plugin when a dev clone exists
-        if name in local_clone_map:
-            ui.item(name, "info", "local clone detected — skipping plugin install")
-            summary["plugins_skipped"].append(name)
-            continue
 
         if installed_output and name in installed_output:
             ui.item(name, "exists", "already installed")
@@ -170,118 +158,6 @@ def install_plugins(ui: UIProtocol, plugins: list[dict], local_clone_map: dict[s
         else:
             ui.item(name, "failed", f"install failed for {source}")
             summary["plugins_failed"].append(name)
-
-
-# ---------------------------------------------------------------------------
-# Local plugin registration (local-clone-wins)
-# ---------------------------------------------------------------------------
-
-
-def _plugin_slug(source: str) -> str:
-    """Convert a plugin source like ``owner/repo`` to the installed-plugins slug."""
-    return source.replace("/", "--")
-
-
-def link_local_plugins(
-    ui: UIProtocol,
-    plugins: list[dict],
-    local_clone_map: dict[str, Path],
-    config_json_path: Path,
-    summary: dict,
-) -> None:
-    """Register local plugin clones so Copilot CLI sees them as installed plugins.
-
-    For each local clone, creates a directory junction in
-    ``~/.copilot/installed-plugins/_direct/<slug>/`` and registers the plugin
-    in ``config.json``'s ``installed_plugins`` array.  This gives the full
-    plugin experience (skills, agents, MCP servers, hooks) from a local
-    source checkout — edits to the clone are reflected immediately.
-    """
-    installed_plugins_dir = config_json_path.parent / "installed-plugins" / "_direct"
-    installed_plugins_dir.mkdir(parents=True, exist_ok=True)
-
-    # Read config.json once
-    config_obj = json_load_safe(config_json_path)
-    registered: list[dict] = config_obj.get("installed_plugins", [])
-    if not isinstance(registered, list):
-        registered = []
-    registered_names = {name for p in registered if isinstance(p, dict) for name in [p.get("name")] if name is not None}
-    config_dirty = False
-
-    for plugin in plugins:
-        name = plugin["name"]
-        if name not in local_clone_map:
-            continue
-
-        clone_path = local_clone_map[name]
-        source = plugin["source"]
-        slug = _plugin_slug(source)
-        junction_path = installed_plugins_dir / slug
-
-        # Read version from local plugin.json
-        version = "0.0.0"
-        plugin_json_path = clone_path / "plugin.json"
-        if plugin_json_path.exists():
-            try:
-                meta = json.loads(plugin_json_path.read_text("utf-8"))
-                version = meta.get("version", version)
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        # ── Junction ──────────────────────────────────────────────────
-        result = create_dir_link(junction_path, clone_path, interactive=False)
-        if result == "created":
-            ui.item(name, "created", f"plugin junction → {clone_path}")
-        elif result == "exists":
-            ui.item(name, "exists", "plugin junction OK")
-        elif result == "skipped":
-            ui.item(
-                name,
-                "skipped",
-                f"plugin junction path exists as real directory: {junction_path} — remove or replace to relink",
-            )
-            continue
-        else:
-            ui.item(name, "failed", f"could not create plugin junction → {clone_path}")
-            continue
-
-        # ── config.json registration ──────────────────────────────────
-        if name not in registered_names:
-            from datetime import datetime, timezone
-
-            registered.append(
-                {
-                    "name": name,
-                    "marketplace": "",
-                    "version": version,
-                    "installed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                    "enabled": True,
-                    "cache_path": str(junction_path),
-                    "source": {"source": "github", "repo": source},
-                }
-            )
-            registered_names.add(name)
-            config_dirty = True
-            ui.item(name, "created", f"registered as plugin (v{version})")
-        else:
-            # Update version and cache_path if they've changed
-            for entry in registered:
-                if entry["name"] == name:
-                    if entry.get("version") != version:
-                        entry["version"] = version
-                        config_dirty = True
-                        ui.item(name, "updated", f"version → v{version}")
-                    elif str(entry.get("cache_path", "")) != str(junction_path):
-                        entry["cache_path"] = str(junction_path)
-                        config_dirty = True
-                        ui.item(name, "updated", f"cache_path → {junction_path}")
-                    else:
-                        ui.item(name, "exists", f"registered (v{version})")
-                    break
-
-    if config_dirty:
-        config_obj["installed_plugins"] = registered
-        config_json_path.write_text(json.dumps(config_obj, indent=2) + "\n", "utf-8")
 
 
 # ---------------------------------------------------------------------------

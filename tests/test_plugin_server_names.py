@@ -60,10 +60,7 @@ def _make_ctx(
 def test_empty_when_copilot_cli_missing(tmp_path: Path):
     """copilot not on PATH, no local clone → empty set."""
     ctx = _make_ctx(tmp_path)
-    with (
-        patch("copilotsetup.skills.shutil.which", return_value=None),
-        patch("copilotsetup.steps.plugins.link_local_plugins"),
-    ):
+    with patch("copilotsetup.skills.shutil.which", return_value=None):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == set()
 
@@ -80,7 +77,6 @@ def test_empty_when_install_fails(tmp_path: Path):
     with (
         patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"),
         patch("copilotsetup.skills._run_copilot", side_effect=_fake),
-        patch("copilotsetup.steps.plugins.link_local_plugins"),
     ):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == set()
@@ -98,7 +94,6 @@ def test_present_when_already_installed(tmp_path: Path):
     with (
         patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"),
         patch("copilotsetup.skills._run_copilot", side_effect=_fake),
-        patch("copilotsetup.steps.plugins.link_local_plugins"),
     ):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
@@ -116,27 +111,32 @@ def test_present_when_fresh_install_succeeds(tmp_path: Path):
     with (
         patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"),
         patch("copilotsetup.skills._run_copilot", side_effect=_fake),
-        patch("copilotsetup.steps.plugins.link_local_plugins"),
     ):
         PluginsStep().run(ctx)
     assert ctx.plugin_server_names == {"msx-mcp"}
 
 
-def test_present_when_local_clone_exists(tmp_path: Path):
-    """Local clone detected → in the set even if copilot CLI is missing."""
+def test_local_clone_no_longer_skips_install(tmp_path: Path):
+    """Local clone presence no longer prevents plugin install."""
     clone = tmp_path / "MSX-MCP"
     clone.mkdir()
     (clone / ".git").mkdir()
 
     ctx = _make_ctx(tmp_path, local_paths={"msx-mcp": str(clone)})
 
+    def _fake(args, *, check=True):
+        if args == ["plugin", "list"]:
+            return "msx-mcp    mcaps-microsoft/MSX-MCP    1.0.0"
+        return "ok"
+
     with (
-        patch("copilotsetup.skills.shutil.which", return_value=None),
-        patch("copilotsetup.steps.plugins.link_local_plugins"),
+        patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"),
+        patch("copilotsetup.skills._run_copilot", side_effect=_fake),
     ):
         PluginsStep().run(ctx)
+    # Plugin is installed normally — local clone doesn't cause special behavior
     assert ctx.plugin_server_names == {"msx-mcp"}
-    assert "msx-mcp" in ctx.local_clone_map
+    assert not hasattr(ctx, "local_clone_map")
 
 
 def test_no_plugins_defined(tmp_path: Path):
