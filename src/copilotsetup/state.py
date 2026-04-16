@@ -85,6 +85,11 @@ class PluginInfo:
     plugin_source: str = ""  # install source (URL, etc.)
     installed: bool = False
     version: str = ""
+    description: str = ""
+    install_path: str = ""
+    bundled_skills: list[str] = field(default_factory=list)
+    bundled_servers: list[str] = field(default_factory=list)
+    bundled_agents: list[str] = field(default_factory=list)
 
     @property
     def status(self) -> str:
@@ -220,6 +225,92 @@ def _get_installed_plugins() -> dict[str, str]:
     return plugins
 
 
+def _discover_plugin_contents(plugin_dir: Path) -> tuple[str, list[str], list[str], list[str]]:
+    """Scan a plugin directory for its bundled contents.
+
+    Returns (description, skill_names, server_names, agent_names).
+    """
+    import json
+
+    description = ""
+    skills: list[str] = []
+    servers: list[str] = []
+    agents: list[str] = []
+
+    # Read plugin.json for metadata
+    plugin_json = plugin_dir / "plugin.json"
+    if plugin_json.is_file():
+        try:
+            data = json.loads(plugin_json.read_text(encoding="utf-8"))
+            description = data.get("description", "")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Scan skills directory
+    skills_dir = plugin_dir / "skills"
+    if skills_dir.is_dir():
+        skills = sorted(d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
+
+    # Scan .copilot/skills (legacy layout)
+    legacy_skills = plugin_dir / ".copilot" / "skills"
+    if legacy_skills.is_dir() and not skills:
+        skills = sorted(d.name for d in legacy_skills.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
+
+    # Read .mcp.json for bundled servers
+    mcp_json = plugin_dir / ".mcp.json"
+    if mcp_json.is_file():
+        try:
+            data = json.loads(mcp_json.read_text(encoding="utf-8"))
+            srv_dict = data.get("mcpServers", data)
+            if isinstance(srv_dict, dict):
+                servers = sorted(srv_dict.keys())
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Also check mcp.json and .copilot/mcp.json
+    for alt_path in [plugin_dir / "mcp.json", plugin_dir / ".copilot" / "mcp.json"]:
+        if alt_path.is_file() and not servers:
+            try:
+                data = json.loads(alt_path.read_text(encoding="utf-8"))
+                srv_dict = data.get("mcpServers", data)
+                if isinstance(srv_dict, dict):
+                    servers = sorted(srv_dict.keys())
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    # Scan agents directory
+    agents_dir = plugin_dir / "agents"
+    if agents_dir.is_dir():
+        agents = sorted(d.name for d in agents_dir.iterdir() if d.is_dir())
+
+    return description, skills, servers, agents
+
+
+def _find_plugin_install_path(name: str, source: str) -> Path | None:
+    """Locate the install directory for a plugin.
+
+    Checks installed-plugins/_direct/ for marketplace installs and
+    falls back to resolving the source as a local path.
+    """
+    installed_dir = home_dir() / ".copilot" / "installed-plugins" / "_direct"
+    if installed_dir.is_dir():
+        for entry in installed_dir.iterdir():
+            if entry.is_dir() and entry.name.endswith(f"--{name}"):
+                return entry
+
+    # Local plugin loaded via --plugin-dir or asPlugin source
+    if source and "/" not in source and "\\" not in source:
+        # It's a simple name — not a path
+        return None
+
+    # Try resolving source as a local path
+    source_path = Path(source).expanduser()
+    if source_path.is_dir():
+        return source_path
+
+    return None
+
+
 def load_dashboard_state() -> DashboardState:
     """Compute the full dashboard state from config sources + filesystem.
 
@@ -351,6 +442,18 @@ def load_dashboard_state() -> DashboardState:
         installed = name in installed_plugins
         version = installed_plugins.get(name, "")
 
+        # Discover plugin contents
+        description = ""
+        bundled_skills: list[str] = []
+        bundled_servers: list[str] = []
+        bundled_agents: list[str] = []
+        install_path_str = ""
+
+        install_path = _find_plugin_install_path(name, plugin_source)
+        if install_path and install_path.is_dir():
+            install_path_str = str(install_path)
+            description, bundled_skills, bundled_servers, bundled_agents = _discover_plugin_contents(install_path)
+
         state.plugins.append(
             PluginInfo(
                 name=name,
@@ -358,6 +461,11 @@ def load_dashboard_state() -> DashboardState:
                 plugin_source=plugin_source,
                 installed=installed,
                 version=version,
+                description=description,
+                install_path=install_path_str,
+                bundled_skills=bundled_skills,
+                bundled_servers=bundled_servers,
+                bundled_agents=bundled_agents,
             )
         )
 
@@ -367,6 +475,21 @@ def load_dashboard_state() -> DashboardState:
         if not any(p.name == name for p in state.plugins):
             installed = name in installed_plugins
             version = installed_plugins.get(name, "")
+
+            # These are loaded from source paths — scan for contents
+            description = ""
+            bundled_skills: list[str] = []
+            bundled_servers: list[str] = []
+            bundled_agents: list[str] = []
+            install_path_str = ""
+
+            src_path = sp.get("path")
+            if src_path:
+                p = Path(str(src_path))
+                if p.is_dir():
+                    install_path_str = str(p)
+                    description, bundled_skills, bundled_servers, bundled_agents = _discover_plugin_contents(p)
+
             state.plugins.append(
                 PluginInfo(
                     name=name,
@@ -374,6 +497,11 @@ def load_dashboard_state() -> DashboardState:
                     plugin_source="local",
                     installed=installed,
                     version=version,
+                    description=description,
+                    install_path=install_path_str,
+                    bundled_skills=bundled_skills,
+                    bundled_servers=bundled_servers,
+                    bundled_agents=bundled_agents,
                 )
             )
 

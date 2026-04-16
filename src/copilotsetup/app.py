@@ -55,6 +55,7 @@ class CopilotSetupApp(App):
 
     def on_mount(self) -> None:
         """Load state when the app starts."""
+        self._state: DashboardState | None = None
         self._load_state()
 
     @work(thread=True)
@@ -65,6 +66,7 @@ class CopilotSetupApp(App):
 
     def _apply_state(self, state: DashboardState) -> None:
         """Apply loaded state to all tables (must run on main thread)."""
+        self._state = state
         populate_source_table(self.query_one("#source-table", DataTable), state)
         populate_server_table(self.query_one("#server-table", DataTable), state)
         populate_skill_table(self.query_one("#skill-table", DataTable), state)
@@ -78,6 +80,98 @@ class CopilotSetupApp(App):
         except Exception:
             ver = "dev"
         status.update(f" copilot-setup v{ver}  │  {state.summary_text}")
+
+    # -- Drill-down on Enter ----------------------------------------------------
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Open a detail screen when Enter is pressed on a table row."""
+        if self._state is None:
+            return
+        table_id = event.data_table.id
+        row_key = str(event.row_key.value) if event.row_key else ""
+        if not row_key:
+            return
+
+        if table_id == "source-table":
+            self._show_source_detail(row_key)
+        elif table_id == "plugin-table":
+            self._show_plugin_detail(row_key)
+
+    def _show_source_detail(self, source_name: str) -> None:
+        """Open detail screen for a config source."""
+        from copilotsetup.screens.detail_screen import DetailScreen
+        from copilotsetup.skills import get_skill_folders
+
+        if self._state is None:
+            return
+
+        # Find the raw ConfigSource
+        src = next((s for s in self._state.raw_sources if s.name == source_name), None)
+        if src is None:
+            return
+
+        sections: list[tuple[str, list[str]]] = []
+
+        # Metadata
+        meta = [f"Path: {src.path}", f"Exists: {'✓' if src.exists else '✗'}"]
+        if src.instructions:
+            meta.append(f"Instructions: ✓  ({src.instructions.name})")
+        if src.portable_config:
+            meta.append(f"Portable config: ✓  ({src.portable_config.name})")
+        if src.lsp_servers:
+            meta.append("LSP servers: ✓")
+        sections.append(("Info", meta))
+
+        # MCP Servers
+        server_names = sorted(src.servers.keys())
+        sections.append((f"MCP Servers ({len(server_names)})", server_names))
+
+        # Skills
+        skill_names: list[str] = []
+        for sd in src.skill_dirs:
+            if sd.is_dir():
+                skill_names.extend(s["name"] for s in get_skill_folders(sd))
+        skill_names.sort()
+        sections.append((f"Skills ({len(skill_names)})", skill_names))
+
+        # Plugins
+        plugin_names = sorted(src.plugins.keys())
+        sections.append((f"Plugins ({len(plugin_names)})", plugin_names))
+
+        self.push_screen(DetailScreen(f"Source: {source_name}", sections))
+
+    def _show_plugin_detail(self, plugin_name: str) -> None:
+        """Open detail screen for a plugin."""
+        from copilotsetup.screens.detail_screen import DetailScreen
+
+        if self._state is None:
+            return
+
+        plugin = next((p for p in self._state.plugins if p.name == plugin_name), None)
+        if plugin is None:
+            return
+
+        sections: list[tuple[str, list[str]]] = []
+
+        # Metadata
+        meta = [
+            f"Status: {plugin.status}",
+            f"Version: {plugin.version or '—'}",
+            f"Source: {plugin.plugin_source or '—'}",
+        ]
+        if plugin.description:
+            meta.append(f"Description: {plugin.description}")
+        if plugin.install_path:
+            meta.append(f"Install path: {plugin.install_path}")
+        sections.append(("Info", meta))
+
+        # Bundled contents
+        sections.append((f"Skills ({len(plugin.bundled_skills)})", plugin.bundled_skills))
+        sections.append((f"MCP Servers ({len(plugin.bundled_servers)})", plugin.bundled_servers))
+        if plugin.bundled_agents:
+            sections.append((f"Agents ({len(plugin.bundled_agents)})", plugin.bundled_agents))
+
+        self.push_screen(DetailScreen(f"Plugin: {plugin_name}", sections))
 
     # -- Actions --------------------------------------------------------------
 

@@ -13,6 +13,7 @@ from copilotsetup.state import (
     SkillInfo,
     SourceInfo,
     _check_env_vars,
+    _discover_plugin_contents,
 )
 
 
@@ -72,6 +73,23 @@ class TestPluginInfo:
         plugin = PluginInfo(name="p", source="src")
         assert plugin.status == "missing"
 
+    def test_bundled_contents(self):
+        plugin = PluginInfo(
+            name="p",
+            source="src",
+            installed=True,
+            version="1.0",
+            bundled_skills=["skill-a", "skill-b"],
+            bundled_servers=["server-x"],
+            bundled_agents=["agent-1"],
+            description="Test plugin",
+            install_path="/some/path",
+        )
+        assert plugin.bundled_skills == ["skill-a", "skill-b"]
+        assert plugin.bundled_servers == ["server-x"]
+        assert plugin.bundled_agents == ["agent-1"]
+        assert plugin.description == "Test plugin"
+
 
 class TestLspInfo:
     def test_ready(self):
@@ -125,3 +143,43 @@ class TestHelpers:
     def test_check_env_vars_missing(self):
         with patch.dict("os.environ", {}, clear=True):
             assert _check_env_vars({"env": {"MISSING": "$MISSING_VAR"}}) is False
+
+    def test_discover_plugin_contents(self, tmp_path):
+        """Scan a synthetic plugin directory for skills, servers, agents."""
+        # Create plugin.json
+        (tmp_path / "plugin.json").write_text('{"description": "Test plugin"}')
+
+        # Create skills
+        for name in ["skill-a", "skill-b"]:
+            skill_dir = tmp_path / "skills" / name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {name}")
+
+        # Create .mcp.json with servers
+        (tmp_path / ".mcp.json").write_text('{"mcpServers": {"srv-x": {}, "srv-y": {}}}')
+
+        # Create agents
+        (tmp_path / "agents" / "agent-1").mkdir(parents=True)
+
+        desc, skills, servers, agents = _discover_plugin_contents(tmp_path)
+        assert desc == "Test plugin"
+        assert skills == ["skill-a", "skill-b"]
+        assert servers == ["srv-x", "srv-y"]
+        assert agents == ["agent-1"]
+
+    def test_discover_plugin_contents_empty(self, tmp_path):
+        """Empty directory returns empty lists."""
+        desc, skills, servers, agents = _discover_plugin_contents(tmp_path)
+        assert desc == ""
+        assert skills == []
+        assert servers == []
+        assert agents == []
+
+    def test_discover_plugin_legacy_skills(self, tmp_path):
+        """Skills under .copilot/skills/ are detected."""
+        skill_dir = tmp_path / ".copilot" / "skills" / "my-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# my-skill")
+
+        _, skills, _, _ = _discover_plugin_contents(tmp_path)
+        assert skills == ["my-skill"]
