@@ -45,3 +45,19 @@ class TestAppCompose:
                 assert len(footers) == 1
 
         asyncio.run(_test())
+
+    def test_app_has_detail_panes(self):
+        async def _test():
+            from copilotsetup.widgets.detail_pane import DetailPane
+
+            app = CopilotSetupApp()
+            async with app.run_test():
+                panes = app.query(DetailPane)
+                assert len(panes) == 5
+                # All hidden by default
+                for pane in panes:
+                    assert not pane.is_visible
+
+        asyncio.run(_test())
+
+        asyncio.run(_test())

@@ -13,14 +13,25 @@ from typing import ClassVar
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import BindingType
+from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
 
 from copilotsetup.state import DashboardState, load_dashboard_state
+from copilotsetup.widgets.detail_pane import DetailPane
 from copilotsetup.widgets.lsp_table import populate_lsp_table
 from copilotsetup.widgets.plugin_table import populate_plugin_table
 from copilotsetup.widgets.server_table import populate_server_table
 from copilotsetup.widgets.skill_table import populate_skill_table
 from copilotsetup.widgets.source_table import populate_source_table
+
+# Maps table IDs to their detail builder method names
+_TABLE_TO_BUILDER: dict[str, str] = {
+    "source-table": "_build_source_sections",
+    "server-table": "_build_server_sections",
+    "skill-table": "_build_skill_sections",
+    "plugin-table": "_build_plugin_sections",
+    "lsp-table": "_build_lsp_sections",
+}
 
 
 class CopilotSetupApp(App):
@@ -34,28 +45,41 @@ class CopilotSetupApp(App):
         ("f6", "run_backup", "Backup"),
         ("f7", "run_restore", "Restore"),
         ("r", "refresh_state", "Refresh"),
+        ("escape", "hide_detail", "Close"),
         ("q", "quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
         with TabbedContent(initial="sources"):
-            with TabPane("Sources", id="sources"):
-                yield _make_table("source", ["Name", "Path", "Servers", "Skills", "Plugins", "Instructions"])
-            with TabPane("MCP Servers", id="servers"):
-                yield _make_table("server", ["Name", "Source", "Type", "Status"])
-            with TabPane("Skills", id="skills"):
-                yield _make_table("skill", ["Name", "Source", "Status"])
-            with TabPane("Plugins", id="plugins"):
-                yield _make_table("plugin", ["Name", "Source", "Status", "Version"])
-            with TabPane("LSP", id="lsp"):
-                yield _make_table("lsp", ["Name", "Command", "Status"])
+            with TabPane("Sources", id="sources"), Horizontal(classes="tab-layout"):
+                with Vertical(classes="list-panel"):
+                    yield _make_table("source", ["Name", "Path", "Servers", "Skills", "Plugins", "Instructions"])
+                yield DetailPane(id="source-detail")
+            with TabPane("MCP Servers", id="servers"), Horizontal(classes="tab-layout"):
+                with Vertical(classes="list-panel"):
+                    yield _make_table("server", ["Name", "Source", "Type", "Status"])
+                yield DetailPane(id="server-detail")
+            with TabPane("Skills", id="skills"), Horizontal(classes="tab-layout"):
+                with Vertical(classes="list-panel"):
+                    yield _make_table("skill", ["Name", "Source", "Status"])
+                yield DetailPane(id="skill-detail")
+            with TabPane("Plugins", id="plugins"), Horizontal(classes="tab-layout"):
+                with Vertical(classes="list-panel"):
+                    yield _make_table("plugin", ["Name", "Source", "Status", "Version"])
+                yield DetailPane(id="plugin-detail")
+            with TabPane("LSP", id="lsp"), Horizontal(classes="tab-layout"):
+                with Vertical(classes="list-panel"):
+                    yield _make_table("lsp", ["Name", "Command", "Status"])
+                yield DetailPane(id="lsp-detail")
         yield _status_bar()
         yield Footer()
 
     def on_mount(self) -> None:
         """Load state when the app starts."""
         self._state: DashboardState | None = None
+        # Per-table tracking of which item has the detail pane open
+        self._selected_item: dict[str, str] = {}
         self._load_state()
 
     @work(thread=True)
@@ -81,46 +105,78 @@ class CopilotSetupApp(App):
             ver = "dev"
         status.update(f" copilot-setup v{ver}  │  {state.summary_text}")
 
-        # If a detail screen is open, rebuild it with fresh data
-        self._refresh_detail_screen()
+        # Refresh any open detail panes with fresh data
+        self._refresh_open_details()
 
-    # -- Drill-down on Enter ----------------------------------------------------
+    # -- Detail sidebar ---------------------------------------------------------
 
-    def _refresh_detail_screen(self) -> None:
-        """If a DetailScreen is currently open, rebuild its content."""
-        from copilotsetup.screens.detail_screen import DetailScreen
-
-        if not isinstance(self.screen, DetailScreen):
-            return
-        # The title encodes what we're viewing: "Source: X" or "Plugin: X"
-        title = self.screen._title
-        if title.startswith("Source: "):
-            name = title.removeprefix("Source: ")
-            sections = self._build_source_sections(name)
+    def _refresh_open_details(self) -> None:
+        """Refresh any detail panes that are currently visible."""
+        for table_id, item_key in list(self._selected_item.items()):
+            builder_name = _TABLE_TO_BUILDER.get(table_id)
+            if not builder_name:
+                continue
+            builder = getattr(self, builder_name)
+            sections = builder(item_key)
             if sections is not None:
-                self.screen.update_sections(title, sections)
-        elif title.startswith("Plugin: "):
-            name = title.removeprefix("Plugin: ")
-            sections = self._build_plugin_sections(name)
-            if sections is not None:
-                self.screen.update_sections(title, sections)
+                detail_id = table_id.replace("-table", "-detail")
+                pane = self.query_one(f"#{detail_id}", DetailPane)
+                if pane.is_visible:
+                    pane.show_detail(item_key, sections)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Open a detail screen when Enter is pressed on a table row."""
+        """Toggle the detail sidebar when Enter is pressed on a table row."""
         if self._state is None:
             return
-        table_id = event.data_table.id
+        table_id = event.data_table.id or ""
         row_key = str(event.row_key.value) if event.row_key else ""
-        if not row_key:
+        if not row_key or not table_id:
             return
 
-        if table_id == "source-table":
-            self._show_source_detail(row_key)
-        elif table_id == "plugin-table":
-            self._show_plugin_detail(row_key)
+        # Find the detail pane sibling
+        detail_id = table_id.replace("-table", "-detail")
+        try:
+            pane = self.query_one(f"#{detail_id}", DetailPane)
+        except Exception:
+            return
+
+        # Toggle: same item → hide, different item → show new
+        if self._selected_item.get(table_id) == row_key and pane.is_visible:
+            pane.hide_detail()
+            self._selected_item.pop(table_id, None)
+            return
+
+        # Build sections for this item
+        builder_name = _TABLE_TO_BUILDER.get(table_id)
+        if not builder_name:
+            return
+        builder = getattr(self, builder_name)
+        sections = builder(row_key)
+        if sections is None:
+            return
+
+        pane.show_detail(row_key, sections)
+        self._selected_item[table_id] = row_key
+
+    def action_hide_detail(self) -> None:
+        """Hide the detail pane in the active tab."""
+        for pane in self.query(DetailPane):
+            if pane.is_visible:
+                pane.hide_detail()
+        # Clear selection tracking
+        for table_id in list(self._selected_item.keys()):
+            detail_id = table_id.replace("-table", "-detail")
+            try:
+                p = self.query_one(f"#{detail_id}", DetailPane)
+                if not p.is_visible:
+                    self._selected_item.pop(table_id, None)
+            except Exception:
+                pass
+
+    # -- Section builders -------------------------------------------------------
 
     def _build_source_sections(self, source_name: str) -> list[tuple[str, list[str]]] | None:
-        """Build detail sections for a source. Returns None if not found."""
+        """Build detail sections for a source."""
         from copilotsetup.skills import get_skill_folders
 
         if self._state is None:
@@ -154,17 +210,46 @@ class CopilotSetupApp(App):
         sections.append((f"Plugins ({len(plugin_names)})", plugin_names))
         return sections
 
-    def _show_source_detail(self, source_name: str) -> None:
-        """Open detail screen for a config source."""
-        from copilotsetup.screens.detail_screen import DetailScreen
+    def _build_server_sections(self, server_name: str) -> list[tuple[str, list[str]]] | None:
+        """Build detail sections for an MCP server."""
+        if self._state is None:
+            return None
+        srv = next((s for s in self._state.servers if s.name == server_name), None)
+        if srv is None:
+            return None
 
-        sections = self._build_source_sections(source_name)
-        if sections is None:
-            return
-        self.push_screen(DetailScreen(f"Source: {source_name}", sections))
+        meta = [
+            f"Source: {srv.source}",
+            f"Type: {srv.server_type}",
+            f"Status: {srv.status}",
+        ]
+        if not srv.env_ok:
+            meta.append("⚠ Environment variables missing")
+        if srv.built:
+            meta.append("Built: ✓")
+        return [("Info", meta)]
+
+    def _build_skill_sections(self, skill_name: str) -> list[tuple[str, list[str]]] | None:
+        """Build detail sections for a skill."""
+        if self._state is None:
+            return None
+        skill = next((s for s in self._state.skills if s.name == skill_name), None)
+        if skill is None:
+            return None
+
+        meta = [
+            f"Source: {skill.source}",
+            f"Status: {skill.status}",
+            f"Linked: {'✓' if skill.is_linked else '✗'}",
+        ]
+        if skill.link_target:
+            meta.append(f"Link target: {skill.link_target}")
+        if not skill.link_ok and skill.is_linked:
+            meta.append("⚠ Link is broken")
+        return [("Info", meta)]
 
     def _build_plugin_sections(self, plugin_name: str) -> list[tuple[str, list[str]]] | None:
-        """Build detail sections for a plugin. Returns None if not found."""
+        """Build detail sections for a plugin."""
         if self._state is None:
             return None
         plugin = next((p for p in self._state.plugins if p.name == plugin_name), None)
@@ -190,16 +275,39 @@ class CopilotSetupApp(App):
             sections.append((f"Agents ({len(plugin.bundled_agents)})", plugin.bundled_agents))
         return sections
 
-    def _show_plugin_detail(self, plugin_name: str) -> None:
-        """Open detail screen for a plugin."""
-        from copilotsetup.screens.detail_screen import DetailScreen
+    def _build_lsp_sections(self, lsp_name: str) -> list[tuple[str, list[str]]] | None:
+        """Build detail sections for an LSP server."""
+        if self._state is None:
+            return None
+        lsp = next((s for s in self._state.lsp_servers if s.name == lsp_name), None)
+        if lsp is None:
+            return None
 
-        sections = self._build_plugin_sections(plugin_name)
-        if sections is None:
-            return
-        self.push_screen(DetailScreen(f"Plugin: {plugin_name}", sections))
+        meta = [
+            f"Command: {lsp.command}",
+            f"Status: {lsp.status}",
+            f"Binary found: {'✓' if lsp.binary_ok else '✗'}",
+        ]
+        return [("Info", meta)]
 
-    # -- Actions --------------------------------------------------------------
+    # -- Column sorting ---------------------------------------------------------
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        """Sort by clicked column header (toggle asc/desc)."""
+        table = event.data_table
+        table_id = table.id or ""
+        col_key = str(event.column_key.value) if hasattr(event.column_key, "value") else str(event.column_key)
+
+        if not hasattr(self, "_sort_state"):
+            self._sort_state: dict[str, tuple[str, bool]] = {}
+
+        prev = self._sort_state.get(table_id)
+        reverse = not prev[1] if prev and prev[0] == col_key else False
+
+        self._sort_state[table_id] = (col_key, reverse)
+        table.sort(event.column_key, reverse=reverse)
+
+    # -- Actions ----------------------------------------------------------------
 
     def action_run_setup(self) -> None:
         self._launch_action("Setup")
@@ -222,7 +330,6 @@ class CopilotSetupApp(App):
 
     def action_refresh_state(self) -> None:
         """Reload state from disk."""
-        self.notify("Refreshing…")
         self._load_state()
 
 

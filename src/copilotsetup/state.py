@@ -59,21 +59,22 @@ class ServerInfo:
 
 @dataclass
 class SkillInfo:
-    """A skill from merged config with link status."""
+    """A skill from merged config with link/install status."""
 
     name: str
     source: str
     link_target: str = ""
     link_ok: bool = False
     is_linked: bool = False
+    plugin_installed: bool = False
 
     @property
     def status(self) -> str:
-        if not self.is_linked:
-            return "missing"
-        if self.link_ok:
-            return "linked"
-        return "broken"
+        if self.is_linked:
+            return "linked" if self.link_ok else "broken"
+        if self.plugin_installed:
+            return "installed"
+        return "missing"
 
 
 @dataclass
@@ -219,7 +220,9 @@ def _get_installed_plugins() -> dict[str, str]:
 
     plugins: dict[str, str] = {}
     for line in result.stdout.splitlines():
-        m = re.match(r"^\s*[•·]\s+(\S+?)(?:@\S+)?\s+\(v([\d.]+)\)", line)
+        # Match lines like "  • name@source (vX.Y.Z)" — bullet char may be
+        # garbled by encoding, so just look for the name@source (vX.Y.Z) pattern.
+        m = re.search(r"(\S+?)@\S+\s+\(v([\d.]+)\)", line)
         if m:
             plugins[m.group(1)] = m.group(2)
     return plugins
@@ -289,18 +292,30 @@ def _discover_plugin_contents(plugin_dir: Path) -> tuple[str, list[str], list[st
 def _find_plugin_install_path(name: str, source: str) -> Path | None:
     """Locate the install directory for a plugin.
 
-    Checks installed-plugins/_direct/ for marketplace installs and
-    falls back to resolving the source as a local path.
+    Checks several locations under installed-plugins/ and falls back to
+    resolving the source as a local path.
     """
-    installed_dir = home_dir() / ".copilot" / "installed-plugins" / "_direct"
-    if installed_dir.is_dir():
-        for entry in installed_dir.iterdir():
-            if entry.is_dir() and entry.name.endswith(f"--{name}"):
+    plugins_root = home_dir() / ".copilot" / "installed-plugins"
+
+    # Check installed-plugins/_direct/<org>--<name>/
+    direct_dir = plugins_root / "_direct"
+    if direct_dir.is_dir():
+        for entry in direct_dir.iterdir():
+            if entry.is_dir() and entry.name.endswith(f"--{name}") and any(entry.iterdir()):
                 return entry
+
+    # Check installed-plugins/<name>/<name>/ (cloned marketplace plugins)
+    cloned = plugins_root / name / name
+    if cloned.is_dir():
+        return cloned
+
+    # Check installed-plugins/<name>/ (flat layout)
+    flat = plugins_root / name
+    if flat.is_dir():
+        return flat
 
     # Local plugin loaded via --plugin-dir or asPlugin source
     if source and "/" not in source and "\\" not in source:
-        # It's a simple name — not a path
         return None
 
     # Try resolving source as a local path
@@ -504,6 +519,26 @@ def load_dashboard_state() -> DashboardState:
                     bundled_agents=bundled_agents,
                 )
             )
+
+    # Add plugin-bundled skills that aren't already in the skills list
+    existing_skill_names = {s.name for s in state.skills}
+    for plugin in state.plugins:
+        for skill_name in plugin.bundled_skills:
+            if skill_name not in existing_skill_names:
+                existing_skill_names.add(skill_name)
+                is_linked = skill_name in linked_skills
+                link_target = linked_skills.get(skill_name, "")
+                link_ok = is_linked and (Path(link_target).is_dir() if link_target else False)
+                state.skills.append(
+                    SkillInfo(
+                        name=skill_name,
+                        source=plugin.name,
+                        link_target=link_target,
+                        link_ok=link_ok,
+                        is_linked=is_linked,
+                        plugin_installed=plugin.installed,
+                    )
+                )
 
     # LSP servers
     if merged.lsp_servers and isinstance(merged.lsp_servers, dict):
