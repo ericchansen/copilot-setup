@@ -9,9 +9,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from copilotsetup.models import UIProtocol
 from copilotsetup.platform_ops import home_dir
 from copilotsetup.sources import SOURCES_FILE
-from copilotsetup.ui import BOLD, CYAN, GRAY, GREEN, RESET, UI
 
 _COPILOT_DIR = ".copilot"
 
@@ -34,7 +34,7 @@ def _default_source_path() -> str:
     return str(Path("~/repos/copilot-config"))
 
 
-def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
+def run_init(ui: UIProtocol, *, non_interactive: bool = False) -> bool:
     """Interactive onboarding wizard. Returns True if a source was registered."""
     sf = sources_file()
 
@@ -59,15 +59,16 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
                 return False
 
     if non_interactive:
-        print("⚠ No config sources registered. Run `copilot-setup init` interactively.")
+        ui.print_msg("No config sources registered. Run copilot-setup init interactively.", "warn")
         return False
 
     # ── Collect source info ──────────────────────────────────────────────
-    print()
-    print(f"  {BOLD}Let's register a config source.{RESET}")
-    print(f"  {GRAY}A config source is a directory (usually a git repo) that holds your{RESET}")
-    print(f"  {GRAY}MCP servers, skills, and instructions in a .copilot/ subdirectory.{RESET}")
-    print()
+    ui.section("Let's register a config source.")
+    ui.print_msg(
+        "A config source is a directory (usually a git repo) that holds your "
+        "MCP servers, skills, and instructions in a .copilot/ subdirectory.",
+        "info",
+    )
 
     name = ui.prompt("Source name", default="personal")
     if not name:
@@ -88,7 +89,7 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
             source_path.mkdir(parents=True, exist_ok=True)
             created_dir = True
         else:
-            print(f"  {GRAY}Registering anyway — you can create it later.{RESET}")
+            ui.print_msg("Registering anyway — you can create it later.", "info")
 
     if source_path.is_dir():
         copilot_dir = source_path / _COPILOT_DIR
@@ -100,7 +101,6 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
     _register_source(sf, name, resolved_path)
 
     # ── Report what happened ─────────────────────────────────────────────
-    print()
     ui.print_msg(f"Registered source '{name}' → {resolved_path}", "success")
     if created_dir:
         ui.print_msg(f"Created directory {source_path}", "success")
@@ -108,13 +108,11 @@ def run_init(ui: UI, *, non_interactive: bool = False) -> bool:
         ui.print_msg("Scaffolded .copilot/ with starter files", "success")
         copilot_dir = source_path / _COPILOT_DIR
         for filename in sorted(_SCAFFOLD_FILES):
-            print(f"    {GRAY}  └ {copilot_dir / filename}{RESET}")
+            ui.print_msg(f"  └ {copilot_dir / filename}", "info")
         skills_dir = copilot_dir / "skills"
-        print(f"    {GRAY}  └ {skills_dir}/{RESET}")
+        ui.print_msg(f"  └ {skills_dir}/", "info")
 
-    print()
-    print(f"  {GREEN}✓{RESET} Config source registered. Run {CYAN}copilot-setup{RESET} to continue setup.")
-    print()
+    ui.print_msg("Config source registered. Run copilot-setup to continue setup.", "success")
     return True
 
 
