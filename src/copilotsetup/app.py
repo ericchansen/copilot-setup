@@ -81,7 +81,29 @@ class CopilotSetupApp(App):
             ver = "dev"
         status.update(f" copilot-setup v{ver}  │  {state.summary_text}")
 
+        # If a detail screen is open, rebuild it with fresh data
+        self._refresh_detail_screen()
+
     # -- Drill-down on Enter ----------------------------------------------------
+
+    def _refresh_detail_screen(self) -> None:
+        """If a DetailScreen is currently open, rebuild its content."""
+        from copilotsetup.screens.detail_screen import DetailScreen
+
+        if not isinstance(self.screen, DetailScreen):
+            return
+        # The title encodes what we're viewing: "Source: X" or "Plugin: X"
+        title = self.screen._title
+        if title.startswith("Source: "):
+            name = title.removeprefix("Source: ")
+            sections = self._build_source_sections(name)
+            if sections is not None:
+                self.screen.update_sections(title, sections)
+        elif title.startswith("Plugin: "):
+            name = title.removeprefix("Plugin: ")
+            sections = self._build_plugin_sections(name)
+            if sections is not None:
+                self.screen.update_sections(title, sections)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Open a detail screen when Enter is pressed on a table row."""
@@ -97,22 +119,18 @@ class CopilotSetupApp(App):
         elif table_id == "plugin-table":
             self._show_plugin_detail(row_key)
 
-    def _show_source_detail(self, source_name: str) -> None:
-        """Open detail screen for a config source."""
-        from copilotsetup.screens.detail_screen import DetailScreen
+    def _build_source_sections(self, source_name: str) -> list[tuple[str, list[str]]] | None:
+        """Build detail sections for a source. Returns None if not found."""
         from copilotsetup.skills import get_skill_folders
 
         if self._state is None:
-            return
-
-        # Find the raw ConfigSource
+            return None
         src = next((s for s in self._state.raw_sources if s.name == source_name), None)
         if src is None:
-            return
+            return None
 
         sections: list[tuple[str, list[str]]] = []
 
-        # Metadata
         meta = [f"Path: {src.path}", f"Exists: {'✓' if src.exists else '✗'}"]
         if src.instructions:
             meta.append(f"Instructions: ✓  ({src.instructions.name})")
@@ -122,11 +140,9 @@ class CopilotSetupApp(App):
             meta.append("LSP servers: ✓")
         sections.append(("Info", meta))
 
-        # MCP Servers
         server_names = sorted(src.servers.keys())
         sections.append((f"MCP Servers ({len(server_names)})", server_names))
 
-        # Skills
         skill_names: list[str] = []
         for sd in src.skill_dirs:
             if sd.is_dir():
@@ -134,26 +150,29 @@ class CopilotSetupApp(App):
         skill_names.sort()
         sections.append((f"Skills ({len(skill_names)})", skill_names))
 
-        # Plugins
         plugin_names = sorted(src.plugins.keys())
         sections.append((f"Plugins ({len(plugin_names)})", plugin_names))
+        return sections
 
-        self.push_screen(DetailScreen(f"Source: {source_name}", sections))
-
-    def _show_plugin_detail(self, plugin_name: str) -> None:
-        """Open detail screen for a plugin."""
+    def _show_source_detail(self, source_name: str) -> None:
+        """Open detail screen for a config source."""
         from copilotsetup.screens.detail_screen import DetailScreen
 
-        if self._state is None:
+        sections = self._build_source_sections(source_name)
+        if sections is None:
             return
+        self.push_screen(DetailScreen(f"Source: {source_name}", sections))
 
+    def _build_plugin_sections(self, plugin_name: str) -> list[tuple[str, list[str]]] | None:
+        """Build detail sections for a plugin. Returns None if not found."""
+        if self._state is None:
+            return None
         plugin = next((p for p in self._state.plugins if p.name == plugin_name), None)
         if plugin is None:
-            return
+            return None
 
         sections: list[tuple[str, list[str]]] = []
 
-        # Metadata
         meta = [
             f"Status: {plugin.status}",
             f"Version: {plugin.version or '—'}",
@@ -165,12 +184,19 @@ class CopilotSetupApp(App):
             meta.append(f"Install path: {plugin.install_path}")
         sections.append(("Info", meta))
 
-        # Bundled contents
         sections.append((f"Skills ({len(plugin.bundled_skills)})", plugin.bundled_skills))
         sections.append((f"MCP Servers ({len(plugin.bundled_servers)})", plugin.bundled_servers))
         if plugin.bundled_agents:
             sections.append((f"Agents ({len(plugin.bundled_agents)})", plugin.bundled_agents))
+        return sections
 
+    def _show_plugin_detail(self, plugin_name: str) -> None:
+        """Open detail screen for a plugin."""
+        from copilotsetup.screens.detail_screen import DetailScreen
+
+        sections = self._build_plugin_sections(plugin_name)
+        if sections is None:
+            return
         self.push_screen(DetailScreen(f"Plugin: {plugin_name}", sections))
 
     # -- Actions --------------------------------------------------------------
