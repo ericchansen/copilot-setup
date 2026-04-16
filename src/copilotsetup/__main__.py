@@ -1,6 +1,6 @@
-"""Allow ``python -m copilotsetup`` to run the CLI."""
+"""Allow ``python -m copilotsetup`` to run the TUI."""
 
-from copilotsetup.cli import main
+from copilotsetup.app import main
 
 if __name__ == "__main__":
     main()

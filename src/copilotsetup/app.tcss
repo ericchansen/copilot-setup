@@ -1,0 +1,25 @@
+/* Copilot Setup TUI — Textual CSS */
+
+Screen {
+    layout: vertical;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary-background;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 1 2;
+}
