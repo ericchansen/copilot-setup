@@ -12,6 +12,19 @@ Screen {
     padding: 0 1;
 }
 
+#action-title {
+    height: 1;
+    background: $accent;
+    color: $text;
+    padding: 0 1;
+    text-style: bold;
+}
+
+#action-log {
+    height: 1fr;
+    padding: 1 2;
+}
+
 DataTable {
     height: 1fr;
 }

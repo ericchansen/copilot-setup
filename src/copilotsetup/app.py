@@ -82,13 +82,23 @@ class CopilotSetupApp(App):
     # -- Actions --------------------------------------------------------------
 
     def action_run_setup(self) -> None:
-        self.notify("Setup not yet wired", severity="warning")
+        self._launch_action("Setup")
 
     def action_run_backup(self) -> None:
-        self.notify("Backup not yet wired", severity="warning")
+        self._launch_action("Backup")
 
     def action_run_restore(self) -> None:
-        self.notify("Restore not yet wired", severity="warning")
+        self._launch_action("Restore")
+
+    def _launch_action(self, name: str) -> None:
+        """Open the action screen, refresh state when it returns."""
+        from copilotsetup.screens.action_screen import ActionScreen
+
+        def _on_dismiss(refreshed: bool) -> None:
+            if refreshed:
+                self._load_state()
+
+        self.push_screen(ActionScreen(name), callback=_on_dismiss)
 
     def action_refresh_state(self) -> None:
         """Reload state from disk."""
