@@ -2,20 +2,27 @@
 
 ## Repository Purpose
 
-This is the **configuration engine** for GitHub Copilot CLI. It discovers, merges, and
-deploys configuration from multiple sources. The engine contains NO configuration data —
-all data (servers, plugins, skills, instructions) comes from config source repos.
+This is the **configuration engine** for GitHub Copilot CLI, presented as a **Textual TUI
+dashboard**. It discovers, merges, and deploys configuration from multiple sources. The
+engine contains NO configuration data — all data (servers, plugins, skills, instructions)
+comes from config source repos.
 
 ## Architecture
 
-- **Entry point**: `cli.py` → `main()` → `_run_setup()`
+- **Entry point**: `app.py` → `main()` → `CopilotSetupApp`
+- **State layer**: `state.py` computes desired state (from merged sources) + actual state (filesystem)
 - **Source discovery**: `sources.py` reads `~/.copilot/config-sources.json`
 - **Pipeline**: Ordered steps defined in `copilotsetup/steps/__init__.py`
 - **Step protocol**: Each step has `name: str`, `check(ctx) -> bool`, `run(ctx) -> StepResult`
+- **Action screen**: `screens/action_screen.py` runs setup/backup/restore in a threaded worker
+- **Tab widgets**: `widgets/` — populate functions for 5 DataTable tabs
 
 ## Key Design Decisions
 
 - **Engine/data separation**: No `mcp-servers.json`, no skills, no instructions in this repo
+- **Desired + actual state**: `state.py` computes what should exist AND what does exist, surfacing drift
+- **Threaded workers**: State loading and actions run in `@work(thread=True)`, UI updates via `call_from_thread()`
+- **Steps stay decoupled from Textual**: Steps return `StepResult` via protocol — never import Textual
 - **Additive merging**: MCP servers, plugins, and skills are collected from ALL sources
 - **First-wins merging**: Instructions, portable config, and LSP config take the first source
 - **Server deduplication**: By name — first occurrence wins
@@ -32,10 +39,13 @@ all data (servers, plugins, skills, instructions) comes from config source repos
 ## File Conventions
 
 When editing:
-- `sources.py` — Core merging logic. If you change merge strategies, update tests
+- `app.py` — TUI entry point. Tabbed dashboard with threaded worker loading.
+- `state.py` — Data layer. Computes `DashboardState` from merged sources + filesystem.
+- `screens/action_screen.py` — Runs setup/backup/restore. Creates SetupContext and uses `runner.run_steps()`.
+- `widgets/` — Pure populate functions that fill DataTable widgets from `DashboardState`.
+- `sources.py` — Core merging logic. If you change merge strategies, update tests.
 - `copilotsetup/steps/` — Each step reads from `ctx` (SetupContext). Steps must not import
-  data directly; they get it from the context which is populated from merged sources
-- `cli.py` — Builds SetupContext by calling `discover_sources()` → `load_source()` → `merge_sources()`
+  data directly; they get it from the context which is populated from merged sources.
 
 ## Pre-commit / Pre-push Checklist (MANDATORY)
 

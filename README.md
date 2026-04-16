@@ -1,16 +1,16 @@
 # copilot-setup
 
-The configuration engine for GitHub Copilot CLI. Discovers, merges, and deploys configuration from multiple sources.
+A Textual TUI dashboard for GitHub Copilot CLI configuration. Discovers, merges, and
+deploys configuration from multiple sources — and shows you exactly what's configured.
 
 ## What It Does
 
-`copilot-setup` is a Python package that manages your Copilot CLI environment:
+`copilot-setup` launches an interactive terminal dashboard that:
 
-- **Skills** — links skill directories into `~/.copilot/skills/`
-- **MCP servers** — builds and generates `mcp-config.json`
-- **LSP servers** — validates binaries and generates `lsp-config.json`
-- **Plugins** — installs Copilot CLI plugins
-- **Config files** — symlinks instructions, patches `config.json`
+- **Shows config state** — sources, MCP servers, skills, plugins, and LSP servers
+- **Detects drift** — compares desired state (from sources) against actual deployed state
+- **Runs actions** — setup, backup, and restore via `F5`/`F6`/`F7` key bindings
+- **Multi-source merging** — additive for servers/skills/plugins, first-wins for instructions
 
 ## Multi-Source Architecture
 
@@ -47,24 +47,21 @@ pip install -e ~/repos/copilot-setup
 ## Usage
 
 ```bash
-# Interactive setup (discovers sources, merges, deploys)
+# Launch the TUI dashboard
 copilot-setup
-
-# Non-interactive
-copilot-setup --non-interactive
-
-# Remove skills not managed by any source
-copilot-setup --clean-orphans
-
-# Backup personalization files
-copilot-setup backup
-
-# Restore from backup
-copilot-setup restore
-
-# Adopt untracked skills
-copilot-setup sync-skills
 ```
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| `F5` | Run setup (discover, merge, deploy) |
+| `F6` | Backup config to OneDrive |
+| `F7` | Restore from backup |
+| `R` | Refresh dashboard state |
+| `Q` | Quit |
+
+The dashboard has 5 tabs: **Sources**, **MCP Servers**, **Skills**, **Plugins**, **LSP**.
 
 ## Development
 
@@ -89,10 +86,20 @@ python -m ruff check . && python -m ruff format --check . && python -m pytest te
 
 ```
 src/copilotsetup/
-  cli.py                ← CLI entry point (copilot-setup command)
+  app.py                ← TUI entry point (Textual App, tabbed dashboard)
+  app.tcss              ← Textual CSS stylesheet
+  state.py              ← Desired + actual state computation (data layer)
+  screens/
+    action_screen.py    ← Action execution screen (setup/backup/restore)
+  widgets/
+    source_table.py     ← Sources tab population
+    server_table.py     ← MCP Servers tab population
+    skill_table.py      ← Skills tab population
+    plugin_table.py     ← Plugins tab population
+    lsp_table.py        ← LSP tab population
   models.py             ← SetupContext, StepResult, Summary, UIProtocol
-  runner.py             ← Step protocol + pipeline runner
-  ui.py                 ← Terminal UI rendering
+  runner.py             ← Step protocol + pipeline runner (used by actions)
+  ui.py                 ← Terminal UI rendering (used internally by runner)
   sources.py            ← Config source discovery & merging
   config.py             ← MCP/LSP config generation
   skills.py             ← Skill discovery, linking, plugin management
