@@ -117,26 +117,25 @@ def test_present_when_fresh_install_succeeds(tmp_path: Path):
 
 
 def test_local_clone_no_longer_skips_install(tmp_path: Path):
-    """Local clone presence no longer prevents plugin install."""
-    clone = tmp_path / "MSX-MCP"
-    clone.mkdir()
-    (clone / ".git").mkdir()
+    """Local clone in local_paths does not prevent plugin install."""
+    ctx = _make_ctx(tmp_path, local_paths={"msx-mcp": str(tmp_path / "MSX-MCP")})
 
-    ctx = _make_ctx(tmp_path, local_paths={"msx-mcp": str(clone)})
+    install_called = False
 
     def _fake(args, *, check=True):
+        nonlocal install_called
         if args == ["plugin", "list"]:
-            return "msx-mcp    mcaps-microsoft/MSX-MCP    1.0.0"
-        return "ok"
+            return ""  # not yet installed
+        install_called = True
+        return "installed"
 
     with (
         patch("copilotsetup.skills.shutil.which", return_value="/usr/bin/copilot"),
         patch("copilotsetup.skills._run_copilot", side_effect=_fake),
     ):
         PluginsStep().run(ctx)
-    # Plugin is installed normally — local clone doesn't cause special behavior
+    assert install_called, "install should be attempted even with local_paths set"
     assert ctx.plugin_server_names == {"msx-mcp"}
-    assert not hasattr(ctx, "local_clone_map")
 
 
 def test_no_plugins_defined(tmp_path: Path):

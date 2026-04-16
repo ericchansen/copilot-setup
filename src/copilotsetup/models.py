@@ -99,8 +99,9 @@ class SetupContext:
     """Immutable-ish bag of paths, flags, and shared state for the pipeline.
 
     Created once at the start of setup and threaded through every step.
-    Steps may mutate ``plugin_managed_names``
-    for downstream steps to consume.
+    Steps may mutate cross-step shared state for downstream consumers,
+    including ``plugin_managed_names``, ``plugin_server_names``, and
+    ``plugins_to_install``.
     """
 
     # Paths
