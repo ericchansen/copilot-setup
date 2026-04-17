@@ -7,6 +7,7 @@ skills, plugins, and LSP servers — and trigger setup/backup/restore actions.
 
 from __future__ import annotations
 
+import contextlib
 from importlib.metadata import version as pkg_version
 from typing import ClassVar
 
@@ -50,7 +51,7 @@ class CopilotSetupApp(App):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield Header(icon="")
         with TabbedContent(initial="sources"):
             with TabPane("Sources", id="sources"), Horizontal(classes="tab-layout"):
                 with Vertical(classes="list-panel"):
@@ -85,8 +86,14 @@ class CopilotSetupApp(App):
     @work(thread=True)
     def _load_state(self) -> None:
         """Load dashboard state in a worker thread."""
+        self.call_from_thread(self._set_status, " refreshing…")
         state = load_dashboard_state()
         self.call_from_thread(self._apply_state, state)
+
+    def _set_status(self, text: str) -> None:
+        """Update the status bar text (main thread)."""
+        with contextlib.suppress(Exception):
+            self.query_one("#status-bar", Static).update(text)
 
     def _apply_state(self, state: DashboardState) -> None:
         """Apply loaded state to all tables (must run on main thread)."""

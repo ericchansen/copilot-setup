@@ -59,5 +59,3 @@ class TestAppCompose:
                     assert not pane.is_visible
 
         asyncio.run(_test())
-
-        asyncio.run(_test())

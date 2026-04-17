@@ -138,7 +138,7 @@ class DashboardState:
         """Number of items where actual ≠ desired."""
         count = 0
         count += sum(1 for s in self.servers if s.status != "ready" and s.status != "configured")
-        count += sum(1 for s in self.skills if s.status != "linked")
+        count += sum(1 for s in self.skills if s.status not in ("linked", "installed"))
         count += sum(1 for p in self.plugins if not p.installed)
         count += sum(1 for lsp in self.lsp_servers if not lsp.binary_ok)
         return count
@@ -220,9 +220,10 @@ def _get_installed_plugins() -> dict[str, str]:
 
     plugins: dict[str, str] = {}
     for line in result.stdout.splitlines():
-        # Match lines like "  • name@source (vX.Y.Z)" — bullet char may be
-        # garbled by encoding, so just look for the name@source (vX.Y.Z) pattern.
-        m = re.search(r"(\S+?)@\S+\s+\(v([\d.]+)\)", line)
+        # Match lines like "  • name@source (vX.Y.Z)".  Bullet char may be
+        # garbled by encoding, so accept any leading punctuation/whitespace
+        # but require the name@source (vX.Y.Z) to be the line's main content.
+        m = re.match(r"^\s*\S{1,3}\s+([A-Za-z0-9_.-]+)@\S+\s+\(v([\d.]+)\)", line)
         if m:
             plugins[m.group(1)] = m.group(2)
     return plugins
