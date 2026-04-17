@@ -63,6 +63,12 @@ copilot-setup
 
 The dashboard has 5 tabs: **Sources**, **MCP Servers**, **Skills**, **Plugins**, **LSP**.
 
+## Known issues and gotchas
+
+- [MCP OAuth and Copilot CLI plugins](docs/mcp-oauth-and-plugins.md) — HTTP MCPs
+  declared inside a plugin do not auto-trigger Copilot CLI's OAuth flow. Covers
+  the diagnosis and two workarounds.
+
 ## Development
 
 ```bash
