@@ -425,10 +425,36 @@ def _status_bar() -> Static:
 # -- Entry point --------------------------------------------------------------
 
 
+_HELP_TEXT = """copilot-setup — manage GitHub Copilot CLI configuration
+
+Usage:
+  copilot-setup              Launch the interactive TUI dashboard.
+  copilot-setup doctor       Probe all configured MCP servers and report health.
+  copilot-setup update       Show whether config-source repos have new commits.
+  copilot-setup update --apply
+                             Fast-forward pull each config-source repo.
+  copilot-setup --help       Show this message.
+  copilot-setup --version    Print the installed version.
+
+See `llm.txt` at the repo root for a machine-readable reference.
+"""
+
+
 def main() -> None:
     import sys
 
     argv = sys.argv[1:]
+    if argv and argv[0] in {"-h", "--help", "help"}:
+        print(_HELP_TEXT)
+        raise SystemExit(0)
+
+    if argv and argv[0] in {"-V", "--version"}:
+        try:
+            print(pkg_version("copilot-setup"))
+        except Exception:
+            print("unknown")
+        raise SystemExit(0)
+
     if argv and argv[0] == "update":
         from copilotsetup.update_sources import run_cli as update_cli
 

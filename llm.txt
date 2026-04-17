@@ -1,0 +1,82 @@
+# copilot-setup
+
+Configuration engine for the GitHub Copilot CLI. Discovers, merges, and deploys
+configuration (MCP servers, skills, plugins, LSP servers, instructions) from
+multiple source repos into `~/.copilot/` and into the repo using Copilot.
+
+## Repository layout
+
+- `src/copilotsetup/` — the engine (no config data lives here)
+- `src/copilotsetup/steps/` — ordered pipeline steps executed by `_run_setup()`
+- `src/copilotsetup/sources.py` — discovery and additive merging of config sources
+- `src/copilotsetup/state.py` — dashboard state model; source of truth for the TUI
+- `src/copilotsetup/doctor.py` — live MCP health probes (stdio + HTTP)
+- `src/copilotsetup/update_sources.py` — check/apply updates for config-source repos
+- `src/copilotsetup/oauth_status.py` — scans `~/.copilot/mcp-oauth-config/`
+- `tests/` — pytest suite (self-contained; no real network or real `~/.copilot`)
+- `docs/mcp-oauth-and-plugins.md` — background on the plugin-HTTP-MCP OAuth gap
+
+## CLI commands
+
+Entry point: `copilot-setup` (configured via `[project.scripts]` in
+`pyproject.toml`, points at `copilotsetup.app:main`).
+
+| Command                      | Purpose                                                      | Interactive? |
+| ---------------------------- | ------------------------------------------------------------ | ------------ |
+| `copilot-setup`              | Launch the Textual TUI dashboard.                             | Yes (TUI)    |
+| `copilot-setup doctor`       | Probe every MCP server once; print a health table.            | No           |
+| `copilot-setup update`       | Show ahead/behind for each config-source git repo.            | No           |
+| `copilot-setup update --apply` | Run `git pull --ff-only` in each config-source repo.        | No           |
+| `copilot-setup --help`       | Print command help.                                           | No           |
+| `copilot-setup --version`    | Print installed version.                                      | No           |
+
+The `doctor` and `update` subcommands never prompt and are safe to invoke from
+CI or from other automations.
+
+## Configuration sources
+
+Read from `~/.copilot/config-sources.json`. Each entry points at a local path
+(typically a git checkout). Sources are merged:
+
+- **Additive** (dedup first-wins by name): MCP servers, plugins, skills, local paths.
+- **First-wins** (by source order): instructions files, portable config, LSP servers.
+
+## Exit codes
+
+- `0` — success / healthy / no action needed.
+- `1` — one or more failures (doctor: unhealthy server; update: fetch/pull failed).
+
+## Tests
+
+```
+python -m pytest tests/ -v
+```
+
+All tests are self-contained — they use `tmp_path` fixtures, spawn inline Python
+subprocesses for stdio probes, and stand up local HTTP servers for HTTP probes.
+They do not read the user's real `~/.copilot/` directory.
+
+## Lint
+
+```
+python -m ruff check .
+python -m ruff format --check .
+```
+
+CI runs both; both must pass.
+
+## For AI agents consuming this repo
+
+- Treat this project as the **engine**, never the **data**. Never add MCP server
+  definitions, skills, or instructions directly to this repo — those belong in
+  config-source repos that `copilot-setup` merges.
+- Platform ops: use `copilotsetup.platform_ops` helpers (`is_link`,
+  `get_link_target`, `remove_link`) — Windows junctions require `rmdir`, not
+  `os.unlink`.
+- Path-prefix checks use separator-boundary matching and are case-insensitive
+  on Windows. See `_under_prefix()` in `steps/skills.py`.
+- When an MCP server's name overlaps with a Copilot CLI built-in (Agency),
+  use the built-in's name so dedup works. Built-ins include: `ado`, `bluebird`,
+  `cloudbuild`, `es-chat`, `icm`, `kusto`, `local`, `m365-copilot`, `m365-user`,
+  `mail`, `calendar`, `msft-learn`, `npx`, `planner`, `remote`,
+  `security-context`, `teams`, `word`, `workiq`.
