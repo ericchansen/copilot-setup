@@ -262,9 +262,6 @@ class UI:
     ) -> list[tuple[str, str]]:
         rows: list[tuple[str, str]] = []
 
-        if data.get("backed_up"):
-            rows.append(("Backup", data.get("backup_dir", "config backed up")))
-
         cfg_parts: list[str] = []
         if data.get("config_files_linked"):
             cfg_parts.append(f"{len(data['config_files_linked'])} linked")
