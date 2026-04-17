@@ -49,6 +49,12 @@ pip install -e ~/repos/copilot-setup
 ```bash
 # Launch the TUI dashboard
 copilot-setup
+
+# Check config-source repos for upstream updates
+copilot-setup update
+
+# Fast-forward pull any sources that are behind
+copilot-setup update --apply
 ```
 
 ### Key Bindings

@@ -418,6 +418,15 @@ def _status_bar() -> Static:
 
 
 def main() -> None:
+    import sys
+
+    argv = sys.argv[1:]
+    if argv and argv[0] == "update":
+        from copilotsetup.update_sources import run_cli as update_cli
+
+        apply = "--apply" in argv[1:]
+        raise SystemExit(update_cli(apply=apply))
+
     app = CopilotSetupApp()
     app.run()
 
