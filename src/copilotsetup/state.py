@@ -39,14 +39,25 @@ class ServerInfo:
     """An MCP server from merged config with deployment status."""
 
     name: str
-    source: str  # which ConfigSource contributed it
+    source: str  # which ConfigSource contributed it (or plugin name)
     server_type: str  # "http" or "local"
     configured: bool = True  # always True if it's in merged config
     built: bool = False  # local path on disk (for buildable servers)
     env_ok: bool = True  # environment variables present
+    from_plugin: bool = False  # contributed by an installed plugin's .mcp.json
+    plugin_installed: bool = False
+    plugin_disabled: bool = False
 
     @property
     def status(self) -> str:
+        if self.from_plugin:
+            if not self.plugin_installed:
+                return "missing"
+            if self.plugin_disabled:
+                return "disabled"
+            if not self.env_ok:
+                return "env missing"
+            return "enabled"
         if not self.env_ok:
             return "env missing"
         if self.server_type == "http":
@@ -138,7 +149,7 @@ class DashboardState:
     def drift_count(self) -> int:
         """Number of items where actual ≠ desired."""
         count = 0
-        count += sum(1 for s in self.servers if s.status != "ready" and s.status != "configured")
+        count += sum(1 for s in self.servers if s.status not in ("ready", "configured", "enabled", "disabled"))
         count += sum(1 for s in self.skills if s.status not in ("linked", "enabled", "disabled"))
         count += sum(1 for p in self.plugins if not p.installed)
         count += sum(1 for lsp in self.lsp_servers if not lsp.binary_ok)
@@ -287,6 +298,31 @@ def set_plugin_enabled(name: str, enabled: bool) -> bool:
     except OSError:
         return False
     return True
+
+
+def _discover_plugin_servers(plugin_dir: Path) -> dict[str, dict]:
+    """Read a plugin's .mcp.json (or fallbacks) and return the server entries.
+
+    Returns a mapping of server name → full entry dict, so callers can
+    inspect ``url``, ``env``, etc. Returns empty dict on failure/missing.
+    """
+    import json
+
+    for candidate in (
+        plugin_dir / ".mcp.json",
+        plugin_dir / "mcp.json",
+        plugin_dir / ".copilot" / "mcp.json",
+    ):
+        if not candidate.is_file():
+            continue
+        try:
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        srv_dict = data.get("mcpServers", data)
+        if isinstance(srv_dict, dict):
+            return {str(k): v for k, v in srv_dict.items() if isinstance(v, dict)}
+    return {}
 
 
 def _discover_plugin_contents(plugin_dir: Path) -> tuple[str, list[str], list[str], list[str]]:
@@ -607,6 +643,32 @@ def load_dashboard_state() -> DashboardState:
                         plugin_disabled=plugin.disabled,
                     )
                 )
+
+    # Add plugin-contributed MCP servers (from plugin's .mcp.json) that
+    # aren't already in state.servers. Config-source entries win by source
+    # order, matching the precedence for skills.
+    existing_server_names = {s.name for s in state.servers}
+    for plugin in state.plugins:
+        if not plugin.install_path:
+            continue
+        plugin_servers = _discover_plugin_servers(Path(plugin.install_path))
+        for srv_name, entry in plugin_servers.items():
+            if srv_name in existing_server_names:
+                continue
+            existing_server_names.add(srv_name)
+            server_type = "http" if "url" in entry else "local"
+            state.servers.append(
+                ServerInfo(
+                    name=srv_name,
+                    source=plugin.name,
+                    server_type=server_type,
+                    built=True,
+                    env_ok=_check_env_vars(entry),
+                    from_plugin=True,
+                    plugin_installed=plugin.installed,
+                    plugin_disabled=plugin.disabled,
+                )
+            )
 
     # LSP servers
     if merged.lsp_servers and isinstance(merged.lsp_servers, dict):
