@@ -11,8 +11,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from copilotsetup.deployed import (
+    read_installed_plugins,
+    read_lsp_config,
+    read_mcp_config,
+    scan_skill_links,
+)
 from copilotsetup.oauth_status import OAuthStatus, build_status_map, scan_oauth_configs, status_for
-from copilotsetup.platform_ops import get_link_target, home_dir, is_link, validate_lsp_binary
+from copilotsetup.platform_ops import home_dir, validate_lsp_binary
 from copilotsetup.skills import get_skill_folders
 from copilotsetup.sources import ConfigSource, MergedConfig, discover_sources, load_source, merge_sources
 
@@ -223,9 +229,8 @@ class DashboardState:
     @property
     def summary_text(self) -> str:
         parts = []
-        if not self.sources:
-            return "No config sources found"
-        parts.append(f"{len(self.sources)} sources")
+        if self.sources:
+            parts.append(f"{len(self.sources)} sources")
         parts.append(f"{len(self.servers)} servers")
         parts.append(f"{len(self.skills)} skills")
         parts.append(f"{len(self.plugins)} plugins")
@@ -289,57 +294,6 @@ def _oauth_status_for(entry: dict, status_map: dict[str, OAuthStatus]) -> OAuthS
 def _copilot_config_path() -> Path:
     """Return the path to ~/.copilot/config.json."""
     return home_dir() / ".copilot" / "config.json"
-
-
-def _get_installed_plugins() -> dict[str, dict[str, object]]:
-    """Read installed plugins from ``~/.copilot/config.json``.
-
-    Returns {name: {"version": str, "disabled": bool, "source": str,
-    "cache_path": str}}. Empty dict on failure.
-
-    We read config.json directly rather than parsing ``copilot plugin list``
-    output because the CLI format varies (marketplace plugins use
-    ``name@source`` while local plugins are bare), strips the ``cache_path``
-    field we need, and encodes the bullet glyph inconsistently on Windows.
-    """
-    import json
-
-    cfg_path = _copilot_config_path()
-    if not cfg_path.is_file():
-        return {}
-
-    try:
-        data = json.loads(cfg_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-    enabled_map = data.get("enabledPlugins", {}) or {}
-    plugins: dict[str, dict[str, object]] = {}
-    for entry in data.get("installedPlugins", []) or []:
-        if not isinstance(entry, dict):
-            continue
-        name = entry.get("name")
-        if not name:
-            continue
-        marketplace = entry.get("marketplace", "") or ""
-        # Check both per-entry "enabled" field and the enabledPlugins map.
-        # Accept any of the variant keys Copilot CLI may have written.
-        enabled = entry.get("enabled", True)
-        candidates = [name]
-        if marketplace:
-            candidates.append(f"{name}@{marketplace}")
-        candidates.append(f"{name}@local")
-        for key in candidates:
-            if key in enabled_map:
-                enabled = bool(enabled_map[key])
-                break
-        plugins[name] = {
-            "version": entry.get("version", ""),
-            "disabled": not enabled,
-            "source": marketplace or "local",
-            "cache_path": entry.get("cache_path", ""),
-        }
-    return plugins
 
 
 def set_plugin_enabled(name: str, enabled: bool) -> bool:
@@ -520,21 +474,33 @@ def _find_plugin_install_path(name: str, source: str, cache_path: str = "") -> P
 
 
 def load_dashboard_state() -> DashboardState:
-    """Compute the full dashboard state from config sources + filesystem.
+    """Compute the full dashboard state.
 
-    This is the main entry point for populating the TUI.
+    Uses a two-tier model:
+
+    * **Tier 1 (always)** — reads the actual deployed state from
+      ``~/.copilot/`` (mcp-config.json, config.json, lsp-config.json, and the
+      skills link farm). This is what Copilot CLI itself reads at runtime, so
+      the dashboard is useful out of the box with a vanilla install.
+    * **Tier 2 (optional)** — if ``~/.copilot/config-sources.json`` registers
+      one or more config sources, their declared content is overlaid to
+      attach provenance (which source contributed a server/plugin) and to
+      surface drift (declared but not deployed).
     """
     state = DashboardState()
-    copilot_home = home_dir() / ".copilot"
-    copilot_skills = copilot_home / "skills"
 
-    # Discover and load sources
+    # ── Tier 1: deployed state (always available) ─────────────────────────
+    vanilla_mcp = read_mcp_config()
+    installed_plugins = read_installed_plugins()
+    vanilla_lsp = read_lsp_config()
+    linked_skills = scan_skill_links()
+
+    # ── Tier 2: optional config-source overlay ────────────────────────────
     raw_sources = discover_sources()
     for src in raw_sources:
         load_source(src)
     state.raw_sources = raw_sources
 
-    # Build source info
     for src in raw_sources:
         state.sources.append(
             SourceInfo(
@@ -550,25 +516,51 @@ def load_dashboard_state() -> DashboardState:
             )
         )
 
-    # Merge
-    merged = merge_sources(raw_sources)
+    merged = merge_sources(raw_sources) if raw_sources else MergedConfig()
     state.merged = merged
 
     # OAuth status for HTTP MCP servers (from ~/.copilot/mcp-oauth-config/)
     oauth_map = build_status_map(scan_oauth_configs())
 
-    # Servers
-    for name, entry in merged.servers.items():
-        if name in merged.disabled_by_default:
+    # ── Servers: union of deployed + source-declared ──────────────────────
+    # Deployed entries come first so "live" state is the default view; any
+    # source-only entries (drift — declared but not deployed) follow.
+    seen_servers: set[str] = set()
+    server_order: list[str] = []
+    for n in vanilla_mcp:
+        if n not in seen_servers:
+            seen_servers.add(n)
+            server_order.append(n)
+    for n in merged.servers:
+        if n in merged.disabled_by_default:
             continue
+        if n not in seen_servers:
+            seen_servers.add(n)
+            server_order.append(n)
+
+    for name in server_order:
+        vanilla_entry = vanilla_mcp.get(name, {})
+        source_entry = merged.servers.get(name, {})
+        # Prefer the source-declared entry when present (it drives env/url
+        # expectations), falling back to the deployed entry.
+        entry = source_entry or vanilla_entry
+
         source_name = _find_server_source(name, raw_sources)
+        if source_name == "unknown":
+            # Fall back to Copilot CLI's own "source" stamp on the deployed
+            # entry (e.g., "user" for manual `copilot mcp add`).
+            stamp = str(vanilla_entry.get("source", "") or "")
+            source_name = stamp if stamp else "user"
+
         server_type = "http" if "url" in entry else "local"
-        built = True  # assume ready unless we can prove otherwise
+        built = True
         if server_type == "local":
-            # Check if there's a local path that should exist
             local_path = merged.local_paths.get(name)
             if local_path:
                 built = Path(local_path).is_dir()
+            elif name not in vanilla_mcp:
+                # Declared by a source but not deployed yet → drift.
+                built = False
 
         env_ok, missing_var = _check_env_vars(entry)
         oauth = _oauth_status_for(entry, oauth_map)
@@ -584,21 +576,7 @@ def load_dashboard_state() -> DashboardState:
             )
         )
 
-    # Skills — show what's deployed + what should be deployed
-    # For plugin sources, skills come via the plugin mechanism (not skill_dirs).
-    # For non-plugin sources, skills come from merged.skill_dirs.
-    # In all cases, scan the deployed skills dir for actual state.
-
-    linked_skills: dict[str, str] = {}
-    if copilot_skills.is_dir():
-        for entry in copilot_skills.iterdir():
-            target_str = ""
-            if is_link(entry):
-                target = get_link_target(entry)
-                target_str = str(target) if target else ""
-            linked_skills[entry.name] = target_str
-
-    # Desired skills from non-plugin sources
+    # ── Skills: link farm + source-declared + plugin-bundled ──────────────
     all_skill_folders: list[dict] = []
     for skill_dir in merged.skill_dirs:
         all_skill_folders.extend(get_skill_folders(skill_dir))
@@ -649,8 +627,7 @@ def load_dashboard_state() -> DashboardState:
             )
         )
 
-    # Plugins — desired from merged, actual from CLI
-    installed_plugins = _get_installed_plugins()
+    # Plugins — desired from merged, actual from CLI (tier-1 readers)
     for name, info in merged.plugins.items():
         source_name = _find_plugin_source(name, raw_sources)
         plugin_source = info.get("source", "")
@@ -726,6 +703,46 @@ def load_dashboard_state() -> DashboardState:
                 )
             )
 
+    # Installed plugins not declared by any source (vanilla installs via
+    # ``copilot plugin install``). These are deployed-only — we still want
+    # them to show up so the user can manage them from the dashboard.
+    existing_plugin_names = {p.name for p in state.plugins}
+    for name, meta in installed_plugins.items():
+        if name in existing_plugin_names:
+            continue
+        existing_plugin_names.add(name)
+        plugin_source = str(meta.get("source", "") or "")
+        cache_path = str(meta.get("cache_path", ""))
+        version = str(meta.get("version", "") or "")
+        disabled = bool(meta.get("disabled", False))
+
+        description = ""
+        bundled_skills: list[str] = []
+        bundled_servers: list[str] = []
+        bundled_agents: list[str] = []
+        install_path_str = ""
+
+        install_path = _find_plugin_install_path(name, plugin_source, cache_path)
+        if install_path and install_path.is_dir():
+            install_path_str = str(install_path)
+            description, bundled_skills, bundled_servers, bundled_agents = _discover_plugin_contents(install_path)
+
+        state.plugins.append(
+            PluginInfo(
+                name=name,
+                source="user",
+                plugin_source=plugin_source,
+                installed=True,
+                disabled=disabled,
+                version=version,
+                description=description,
+                install_path=install_path_str,
+                bundled_skills=bundled_skills,
+                bundled_servers=bundled_servers,
+                bundled_agents=bundled_agents,
+            )
+        )
+
     # Add plugin-bundled skills that aren't already in the skills list
     existing_skill_names = {s.name for s in state.skills}
     for plugin in state.plugins:
@@ -777,9 +794,10 @@ def load_dashboard_state() -> DashboardState:
                 )
             )
 
-    # LSP servers
-    if merged.lsp_servers and isinstance(merged.lsp_servers, dict):
-        lsp_entries = merged.lsp_servers.get("lspServers", {})
+    # LSP servers — prefer source overlay, fall back to deployed ~/.copilot/lsp-config.json
+    lsp_config = merged.lsp_servers if merged.lsp_servers else vanilla_lsp
+    if lsp_config and isinstance(lsp_config, dict):
+        lsp_entries = lsp_config.get("lspServers", {})
         for name, cfg in lsp_entries.items():
             command = cfg.get("command", "")
             args = cfg.get("args", [])

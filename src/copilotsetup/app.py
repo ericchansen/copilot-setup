@@ -53,11 +53,7 @@ class CopilotSetupApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(icon="")
-        with TabbedContent(initial="sources"):
-            with TabPane("Sources", id="sources"), Horizontal(classes="tab-layout"):
-                with Vertical(classes="list-panel"):
-                    yield _make_table("source", ["Name", "Path", "Servers", "Skills", "Plugins", "Instructions"])
-                yield DetailPane(id="source-detail")
+        with TabbedContent(initial="servers"):
             with TabPane("MCP Servers", id="servers"), Horizontal(classes="tab-layout"):
                 with Vertical(classes="list-panel"):
                     yield _make_table("server", ["Name", "Source", "Type", "Status", "Reason"])
@@ -74,6 +70,10 @@ class CopilotSetupApp(App):
                 with Vertical(classes="list-panel"):
                     yield _make_table("lsp", ["Name", "Command", "Status", "Reason"])
                 yield DetailPane(id="lsp-detail")
+            with TabPane("Sources", id="sources"), Horizontal(classes="tab-layout"):
+                with Vertical(classes="list-panel"):
+                    yield _make_table("source", ["Name", "Path", "Servers", "Skills", "Plugins", "Instructions"])
+                yield DetailPane(id="source-detail")
         yield _status_bar()
         yield Footer()
 

@@ -119,7 +119,13 @@ class TestDashboardState:
     def test_empty_state(self):
         state = DashboardState()
         assert state.drift_count == 0
-        assert "No config sources" in state.summary_text
+        # With no sources and no deployed items, summary still shows live counts.
+        summary = state.summary_text
+        assert "0 servers" in summary
+        assert "0 skills" in summary
+        # No "sources" prefix when none are registered.
+        assert "sources" not in summary
+        assert "✓ all synced" in summary
 
     def test_summary_text(self):
         state = DashboardState(
@@ -286,3 +292,109 @@ class TestFindPluginInstallPath:
         # Non-existent cache_path, bare source (marketplace-style) — should return None
         result = _find_plugin_install_path("nope", "some-marketplace", str(tmp_path / "missing"))
         assert result is None
+
+
+class TestLoadDashboardStateVanilla:
+    """Tier-1 loading: ``~/.copilot/`` is read even with zero config sources."""
+
+    def _setup(self, tmp_path, monkeypatch):
+        """Stub deployed._copilot_home + platform_ops.home_dir to use tmp_path."""
+        import copilotsetup.deployed as deployed_mod
+        import copilotsetup.state as state_mod
+
+        fake_home = tmp_path / "home"
+        fake_dotcopilot = fake_home / ".copilot"
+        fake_dotcopilot.mkdir(parents=True)
+        monkeypatch.setattr(deployed_mod, "_copilot_home", lambda: fake_dotcopilot)
+        monkeypatch.setattr(state_mod, "home_dir", lambda: fake_home)
+        # Prevent any real source discovery
+        monkeypatch.setattr(state_mod, "discover_sources", list)
+        return fake_dotcopilot
+
+    def test_vanilla_servers_populate_with_no_sources(self, tmp_path, monkeypatch):
+        import json as _json
+
+        from copilotsetup.state import load_dashboard_state
+
+        home = self._setup(tmp_path, monkeypatch)
+        (home / "mcp-config.json").write_text(
+            _json.dumps(
+                {
+                    "mcpServers": {
+                        "github": {"url": "https://api.githubcopilot.com/mcp/", "source": "user"},
+                        "local-srv": {"command": "python", "args": ["-m", "srv"], "source": "user"},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        state = load_dashboard_state()
+        names = sorted(s.name for s in state.servers)
+        assert names == ["github", "local-srv"]
+        # Each server carries the Copilot "user" stamp as its source.
+        by_name = {s.name: s for s in state.servers}
+        assert by_name["github"].source == "user"
+        assert by_name["github"].server_type == "http"
+        assert by_name["local-srv"].server_type == "local"
+        # Deployed local servers are considered "built" (they're on disk).
+        assert by_name["local-srv"].built is True
+
+    def test_vanilla_lsp_populates_with_no_sources(self, tmp_path, monkeypatch):
+        import json as _json
+
+        from copilotsetup.state import load_dashboard_state
+
+        home = self._setup(tmp_path, monkeypatch)
+        (home / "lsp-config.json").write_text(
+            _json.dumps({"lspServers": {"typescript": {"command": "tsserver", "args": [], "fileExtensions": [".ts"]}}}),
+            encoding="utf-8",
+        )
+
+        state = load_dashboard_state()
+        assert len(state.lsp_servers) == 1
+        assert state.lsp_servers[0].name == "typescript"
+
+    def test_vanilla_plugins_populate_with_no_sources(self, tmp_path, monkeypatch):
+        import json as _json
+
+        from copilotsetup.state import load_dashboard_state
+
+        home = self._setup(tmp_path, monkeypatch)
+        (home / "config.json").write_text(
+            _json.dumps(
+                {
+                    "installedPlugins": [
+                        {
+                            "name": "peon-ping",
+                            "marketplace": "peon-ping-marketplace",
+                            "version": "1.0.0",
+                            "enabled": True,
+                        }
+                    ],
+                    "enabledPlugins": {"peon-ping@peon-ping-marketplace": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        state = load_dashboard_state()
+        names = [p.name for p in state.plugins]
+        assert "peon-ping" in names
+        p = next(p for p in state.plugins if p.name == "peon-ping")
+        # Installed but not declared by any source → source="user".
+        assert p.source == "user"
+        assert p.installed is True
+        assert p.disabled is False
+
+    def test_empty_copilot_home_yields_empty_state(self, tmp_path, monkeypatch):
+        """With no ~/.copilot/ files at all, dashboard loads without error."""
+        from copilotsetup.state import load_dashboard_state
+
+        self._setup(tmp_path, monkeypatch)
+        state = load_dashboard_state()
+        assert state.servers == []
+        assert state.plugins == []
+        assert state.lsp_servers == []
+        assert state.sources == []
+        assert "0 servers" in state.summary_text
