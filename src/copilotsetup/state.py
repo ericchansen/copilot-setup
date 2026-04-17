@@ -242,17 +242,22 @@ def _get_installed_plugins() -> dict[str, dict[str, object]]:
         name = entry.get("name")
         if not name:
             continue
-        marketplace = entry.get("marketplace", "") or "local"
-        # Check both per-entry "enabled" field and the enabledPlugins map
+        marketplace = entry.get("marketplace", "") or ""
+        # Check both per-entry "enabled" field and the enabledPlugins map.
+        # Accept any of the variant keys Copilot CLI may have written.
         enabled = entry.get("enabled", True)
-        for key in (name, f"{name}@{marketplace}"):
+        candidates = [name]
+        if marketplace:
+            candidates.append(f"{name}@{marketplace}")
+        candidates.append(f"{name}@local")
+        for key in candidates:
             if key in enabled_map:
                 enabled = bool(enabled_map[key])
                 break
         plugins[name] = {
             "version": entry.get("version", ""),
             "disabled": not enabled,
-            "source": marketplace,
+            "source": marketplace or "local",
             "cache_path": entry.get("cache_path", ""),
         }
     return plugins
@@ -276,21 +281,26 @@ def set_plugin_enabled(name: str, enabled: bool) -> bool:
         return False
 
     found = False
-    marketplace = "local"
+    marketplace = ""
     for entry in data.get("installedPlugins", []) or []:
         if isinstance(entry, dict) and entry.get("name") == name:
             entry["enabled"] = enabled
-            marketplace = entry.get("marketplace", "") or "local"
+            # Preserve empty-string marketplace for direct-install plugins —
+            # Copilot CLI's enabledPlugins key for those is the bare name, not
+            # ``name@local``.
+            marketplace = entry.get("marketplace", "") or ""
             found = True
             break
     if not found:
         return False
 
     enabled_map = data.setdefault("enabledPlugins", {})
-    # Prefer existing key form so we update in place
-    key = f"{name}@{marketplace}" if f"{name}@{marketplace}" in enabled_map else name
-    if key not in enabled_map:
-        key = f"{name}@{marketplace}"
+    # Prefer an existing key form so we update in place; otherwise use the
+    # canonical key for this plugin's marketplace (bare name when empty,
+    # ``name@marketplace`` when a marketplace is set).
+    canonical = f"{name}@{marketplace}" if marketplace else name
+    candidates = [name, f"{name}@{marketplace}", f"{name}@local"] if marketplace else [name, f"{name}@local"]
+    key = next((k for k in candidates if k in enabled_map), canonical)
     enabled_map[key] = enabled
 
     try:
@@ -386,12 +396,19 @@ def _discover_plugin_contents(plugin_dir: Path) -> tuple[str, list[str], list[st
     return description, skills, servers, agents
 
 
-def _find_plugin_install_path(name: str, source: str) -> Path | None:
+def _find_plugin_install_path(name: str, source: str, cache_path: str = "") -> Path | None:
     """Locate the install directory for a plugin.
 
-    Checks several locations under installed-plugins/ and falls back to
-    resolving the source as a local path.
+    Prefers ``cache_path`` from ``installedPlugins[]`` (authoritative — it's
+    exactly where Copilot CLI installed the plugin). Falls back to heuristics
+    for plugins without a cache_path (e.g., loaded from a local dir).
     """
+    # Prefer the authoritative cache_path from config.json
+    if cache_path:
+        cached = Path(cache_path).expanduser()
+        if cached.is_dir():
+            return cached
+
     plugins_root = home_dir() / ".copilot" / "installed-plugins"
 
     # Check installed-plugins/_direct/<org>--<name>/
@@ -563,7 +580,7 @@ def load_dashboard_state() -> DashboardState:
         bundled_agents: list[str] = []
         install_path_str = ""
 
-        install_path = _find_plugin_install_path(name, plugin_source)
+        install_path = _find_plugin_install_path(name, plugin_source, str(meta.get("cache_path", "")))
         if install_path and install_path.is_dir():
             install_path_str = str(install_path)
             description, bundled_skills, bundled_servers, bundled_agents = _discover_plugin_contents(install_path)

@@ -187,3 +187,94 @@ class TestHelpers:
 
         _, skills, _, _ = _discover_plugin_contents(tmp_path)
         assert skills == ["my-skill"]
+
+
+class TestSetPluginEnabled:
+    """Verify enabledPlugins key form for direct-install vs marketplace plugins."""
+
+    def _write_config(self, tmp_path, installed, enabled_plugins):
+        import json
+
+        cfg = tmp_path / "config.json"
+        cfg.write_text(
+            json.dumps({"installedPlugins": installed, "enabledPlugins": enabled_plugins}),
+            encoding="utf-8",
+        )
+        return cfg
+
+    def _read_enabled(self, cfg):
+        import json
+
+        return json.loads(cfg.read_text(encoding="utf-8")).get("enabledPlugins", {})
+
+    def test_direct_install_uses_bare_name(self, tmp_path):
+        """Plugin with empty marketplace should get ``name`` as the key, not ``name@local``."""
+        from copilotsetup import state
+
+        cfg = self._write_config(
+            tmp_path,
+            installed=[{"name": "msx-mcp", "marketplace": "", "enabled": False}],
+            enabled_plugins={},
+        )
+        with patch.object(state, "_copilot_config_path", return_value=cfg):
+            assert state.set_plugin_enabled("msx-mcp", True)
+        em = self._read_enabled(cfg)
+        assert em == {"msx-mcp": True}
+
+    def test_marketplace_uses_at_syntax(self, tmp_path):
+        """Marketplace plugin should get ``name@marketplace`` as the key."""
+        from copilotsetup import state
+
+        cfg = self._write_config(
+            tmp_path,
+            installed=[
+                {"name": "maenifold", "marketplace": "maenifold-marketplace", "enabled": False}
+            ],
+            enabled_plugins={},
+        )
+        with patch.object(state, "_copilot_config_path", return_value=cfg):
+            assert state.set_plugin_enabled("maenifold", True)
+        em = self._read_enabled(cfg)
+        assert em == {"maenifold@maenifold-marketplace": True}
+
+    def test_updates_existing_key_in_place(self, tmp_path):
+        """If a variant key already exists, update it in place (don't add a duplicate)."""
+        from copilotsetup import state
+
+        cfg = self._write_config(
+            tmp_path,
+            installed=[{"name": "msx-mcp", "marketplace": "", "enabled": True}],
+            enabled_plugins={"msx-mcp@local": True},
+        )
+        with patch.object(state, "_copilot_config_path", return_value=cfg):
+            assert state.set_plugin_enabled("msx-mcp", False)
+        em = self._read_enabled(cfg)
+        # Legacy key preserved and updated — no duplicate new entry
+        assert em == {"msx-mcp@local": False}
+
+    def test_returns_false_when_plugin_missing(self, tmp_path):
+        from copilotsetup import state
+
+        cfg = self._write_config(tmp_path, installed=[], enabled_plugins={})
+        with patch.object(state, "_copilot_config_path", return_value=cfg):
+            assert state.set_plugin_enabled("nonexistent", True) is False
+
+
+class TestFindPluginInstallPath:
+    """_find_plugin_install_path prefers cache_path over heuristic guesses."""
+
+    def test_uses_cache_path_when_valid(self, tmp_path):
+        from copilotsetup.state import _find_plugin_install_path
+
+        real = tmp_path / "real-install"
+        real.mkdir()
+        (real / "plugin.json").write_text("{}")
+        result = _find_plugin_install_path("whatever", "", str(real))
+        assert result == real
+
+    def test_falls_back_when_cache_path_missing(self, tmp_path):
+        from copilotsetup.state import _find_plugin_install_path
+
+        # Non-existent cache_path, bare source (marketplace-style) — should return None
+        result = _find_plugin_install_path("nope", "some-marketplace", str(tmp_path / "missing"))
+        assert result is None
