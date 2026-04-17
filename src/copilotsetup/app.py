@@ -233,13 +233,11 @@ class CopilotSetupApp(App):
         ]
         if srv.reason:
             meta.append(f"Reason: {srv.reason}")
-        if srv.server_type == "http":
+        if srv.server_type == "http" and srv.oauth_status in ("authenticated", "needs_auth"):
             oauth_label = {
                 "authenticated": "✓ Authenticated",
                 "needs_auth": "⚠ Needs OAuth",
-                "not_applicable": "—",
-                "unknown": "?",
-            }.get(srv.oauth_status, srv.oauth_status)
+            }[srv.oauth_status]
             meta.append(f"OAuth: {oauth_label}")
         if not srv.env_ok:
             meta.append("⚠ Environment variables missing")

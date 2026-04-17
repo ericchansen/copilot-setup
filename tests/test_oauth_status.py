@@ -75,6 +75,6 @@ def test_status_for_trailing_slash_tolerance() -> None:
     assert status_for("https://example.com/mcp/", smap) == "authenticated"
 
 
-def test_status_for_unknown_url_defaults_to_needs_auth() -> None:
+def test_status_for_unknown_url_defaults_to_not_applicable() -> None:
     smap: dict[str, str] = {}
-    assert status_for("https://unknown.example/mcp", smap) == "needs_auth"
+    assert status_for("https://unknown.example/mcp", smap) == "not_applicable"

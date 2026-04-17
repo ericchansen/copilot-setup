@@ -75,11 +75,15 @@ def build_status_map(entries: list[OAuthEntry]) -> dict[str, OAuthStatus]:
 
 
 def status_for(url: str, status_map: dict[str, OAuthStatus]) -> OAuthStatus:
-    """Look up status for a given HTTP MCP URL, with trailing-slash tolerance."""
+    """Look up status for a given HTTP MCP URL, with trailing-slash tolerance.
+
+    If no entry exists for the URL, we don't know whether the server uses OAuth
+    (it may use static API keys in headers instead), so we return
+    ``not_applicable`` rather than assuming it needs auth.
+    """
     if url in status_map:
         return status_map[url]
-    # Try with/without trailing slash
     alt = url[:-1] if url.endswith("/") else url + "/"
     if alt in status_map:
         return status_map[alt]
-    return "needs_auth"
+    return "not_applicable"
