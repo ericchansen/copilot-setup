@@ -1,0 +1,56 @@
+/* Copilot Setup TUI — Textual CSS */
+
+Screen {
+    layout: vertical;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $primary-background;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+#action-title {
+    height: 1;
+    background: $accent;
+    color: $text;
+    padding: 0 1;
+    text-style: bold;
+}
+
+#action-log {
+    height: 1fr;
+    padding: 1 2;
+}
+
+/* Tab layout: list panel + optional detail sidebar */
+.tab-layout {
+    height: 1fr;
+}
+
+.list-panel {
+    width: 1fr;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 0 1;
+}
+
+/* Detail pane title */
+.detail-title {
+    height: 1;
+    background: $accent;
+    color: $text;
+    padding: 0 1;
+    text-style: bold;
+}

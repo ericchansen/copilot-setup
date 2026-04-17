@@ -1,16 +1,16 @@
 # copilot-setup
 
-The configuration engine for GitHub Copilot CLI. Discovers, merges, and deploys configuration from multiple sources.
+A Textual TUI dashboard for GitHub Copilot CLI configuration. Discovers, merges, and
+deploys configuration from multiple sources — and shows you exactly what's configured.
 
 ## What It Does
 
-`copilot-setup` is a Python package that manages your Copilot CLI environment:
+`copilot-setup` launches an interactive terminal dashboard that:
 
-- **Skills** — links skill directories into `~/.copilot/skills/`
-- **MCP servers** — builds and generates `mcp-config.json`
-- **LSP servers** — validates binaries and generates `lsp-config.json`
-- **Plugins** — installs Copilot CLI plugins
-- **Config files** — symlinks instructions, patches `config.json`
+- **Shows config state** — sources, MCP servers, skills, plugins, and LSP servers
+- **Detects drift** — compares desired state (from sources) against actual deployed state
+- **Runs actions** — setup via `F5` key binding
+- **Multi-source merging** — additive for servers/skills/plugins, first-wins for instructions
 
 ## Multi-Source Architecture
 
@@ -47,24 +47,38 @@ pip install -e ~/repos/copilot-setup
 ## Usage
 
 ```bash
-# Interactive setup (discovers sources, merges, deploys)
+# Launch the TUI dashboard
 copilot-setup
 
-# Non-interactive
-copilot-setup --non-interactive
+# Check config-source repos for upstream updates
+copilot-setup update
 
-# Remove skills not managed by any source
-copilot-setup --clean-orphans
+# Fast-forward pull any sources that are behind
+copilot-setup update --apply
 
-# Backup personalization files
-copilot-setup backup
-
-# Restore from backup
-copilot-setup restore
-
-# Adopt untracked skills
-copilot-setup sync-skills
+# Probe MCP servers live (spawn/HTTP initialize); shows ok / timeout /
+# needs_oauth / etc. per server.
+copilot-setup doctor
 ```
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| `F5` | Run setup (discover, merge, deploy) |
+| `R` | Refresh dashboard state |
+| `T` | Enable / disable plugin (Plugins tab) |
+| `U` | Upgrade plugin (Plugins tab) |
+| `X` | Uninstall plugin (Plugins tab) |
+| `Q` | Quit |
+
+The dashboard has 5 tabs: **Sources**, **MCP Servers**, **Skills**, **Plugins**, **LSP**.
+
+## Known issues and gotchas
+
+- [MCP OAuth and Copilot CLI plugins](docs/mcp-oauth-and-plugins.md) — HTTP MCPs
+  declared inside a plugin do not auto-trigger Copilot CLI's OAuth flow. Covers
+  the diagnosis and two workarounds.
 
 ## Development
 
@@ -89,16 +103,24 @@ python -m ruff check . && python -m ruff format --check . && python -m pytest te
 
 ```
 src/copilotsetup/
-  cli.py                ← CLI entry point (copilot-setup command)
+  app.py                ← TUI entry point (Textual App, tabbed dashboard)
+  app.tcss              ← Textual CSS stylesheet
+  state.py              ← Desired + actual state computation (data layer)
+  screens/
+    action_screen.py    ← Action execution screen (setup)
+  widgets/
+    source_table.py     ← Sources tab population
+    server_table.py     ← MCP Servers tab population
+    skill_table.py      ← Skills tab population
+    plugin_table.py     ← Plugins tab population
+    lsp_table.py        ← LSP tab population
   models.py             ← SetupContext, StepResult, Summary, UIProtocol
-  runner.py             ← Step protocol + pipeline runner
-  ui.py                 ← Terminal UI rendering
+  runner.py             ← Step protocol + pipeline runner (used by actions)
+  ui.py                 ← Terminal UI rendering (used internally by runner)
   sources.py            ← Config source discovery & merging
   config.py             ← MCP/LSP config generation
   skills.py             ← Skill discovery, linking, plugin management
   platform_ops.py       ← Cross-platform symlinks, junctions
-  backup.py             ← Backup & OneDrive sync
-  restore.py            ← Restore from backup
   git_helpers.py        ← Git authentication detection
   optional_deps.py      ← Interactive optional dependency installs
   build_detect.py       ← Build system detection for MCP servers

@@ -3,7 +3,6 @@
 Import all steps here for convenient access from the runner.
 """
 
-from copilotsetup.steps.backup import BackupStep
 from copilotsetup.steps.config_links import ConfigLinksStep
 from copilotsetup.steps.config_patch import ConfigPatchStep
 from copilotsetup.steps.directories import DirectoriesStep
@@ -21,7 +20,6 @@ from copilotsetup.steps.trusted_folders import TrustedFoldersStep
 # Ordered list of all setup steps — matches the original _run_setup() flow.
 ALL_STEPS = [
     GitAuthStep(),
-    BackupStep(),
     DirectoriesStep(),
     ConfigLinksStep(),
     ConfigPatchStep(),
@@ -38,7 +36,6 @@ ALL_STEPS = [
 
 __all__ = [
     "ALL_STEPS",
-    "BackupStep",
     "CleanupStep",
     "ConfigLinksStep",
     "ConfigPatchStep",
