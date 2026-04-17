@@ -55,6 +55,10 @@ copilot-setup update
 
 # Fast-forward pull any sources that are behind
 copilot-setup update --apply
+
+# Probe MCP servers live (spawn/HTTP initialize); shows ok / timeout /
+# needs_oauth / etc. per server.
+copilot-setup doctor
 ```
 
 ### Key Bindings

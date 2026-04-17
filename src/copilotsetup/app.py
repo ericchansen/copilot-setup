@@ -427,6 +427,11 @@ def main() -> None:
         apply = "--apply" in argv[1:]
         raise SystemExit(update_cli(apply=apply))
 
+    if argv and argv[0] == "doctor":
+        from copilotsetup.doctor import run_cli as doctor_cli
+
+        raise SystemExit(doctor_cli())
+
     app = CopilotSetupApp()
     app.run()
 
