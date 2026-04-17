@@ -46,6 +46,7 @@ class CopilotSetupApp(App):
         ("f6", "run_backup", "Backup"),
         ("f7", "run_restore", "Restore"),
         ("r", "refresh_state", "Refresh"),
+        ("t", "toggle_plugin", "Enable/Disable"),
         ("escape", "hide_detail", "Close"),
         ("q", "quit", "Quit"),
     ]
@@ -337,6 +338,51 @@ class CopilotSetupApp(App):
 
     def action_refresh_state(self) -> None:
         """Reload state from disk."""
+        self._load_state()
+
+    def action_toggle_plugin(self) -> None:
+        """Toggle enabled/disabled for the plugin under the cursor.
+
+        Only active on the Plugins tab. Updates ~/.copilot/config.json and
+        refreshes state.
+        """
+        if self._state is None:
+            return
+        try:
+            tabs = self.query_one(TabbedContent)
+        except Exception:
+            return
+        if tabs.active != "plugins":
+            self._set_status(" ⚠ Plugin toggle only works on the Plugins tab")
+            return
+
+        table = self.query_one("#plugin-table", DataTable)
+        if table.cursor_row < 0 or not table.row_count:
+            return
+        try:
+            row_key = table.coordinate_to_cell_key((table.cursor_row, 0)).row_key
+        except Exception:
+            return
+        name = str(row_key.value) if row_key else ""
+        if not name:
+            return
+
+        plugin = next((p for p in self._state.plugins if p.name == name), None)
+        if plugin is None:
+            return
+        if not plugin.installed:
+            self._set_status(f" ⚠ {name} is not installed")
+            return
+
+        from copilotsetup.state import set_plugin_enabled
+
+        new_enabled = plugin.disabled  # flip
+        ok = set_plugin_enabled(name, new_enabled)
+        if not ok:
+            self._set_status(f" ✗ Failed to toggle {name}")
+            return
+        action = "enabled" if new_enabled else "disabled"
+        self._set_status(f" ✓ {name} {action} — reloading…")
         self._load_state()
 
 

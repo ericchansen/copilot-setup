@@ -65,9 +65,13 @@ class TestSkillInfo:
 
 
 class TestPluginInfo:
-    def test_installed(self):
+    def test_enabled(self):
         plugin = PluginInfo(name="p", source="src", installed=True, version="1.0")
-        assert plugin.status == "installed"
+        assert plugin.status == "enabled"
+
+    def test_disabled(self):
+        plugin = PluginInfo(name="p", source="src", installed=True, disabled=True, version="1.0")
+        assert plugin.status == "disabled"
 
     def test_missing(self):
         plugin = PluginInfo(name="p", source="src")

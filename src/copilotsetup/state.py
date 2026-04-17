@@ -7,7 +7,6 @@ are plain dataclasses — no Textual reactive state lives here.
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -74,7 +73,7 @@ class SkillInfo:
         if self.is_linked:
             return "linked" if self.link_ok else "broken"
         if self.plugin_installed:
-            return "disabled" if self.plugin_disabled else "installed"
+            return "disabled" if self.plugin_disabled else "enabled"
         return "missing"
 
 
@@ -97,7 +96,7 @@ class PluginInfo:
     @property
     def status(self) -> str:
         if self.installed:
-            return "disabled" if self.disabled else "installed"
+            return "disabled" if self.disabled else "enabled"
         return "missing"
 
 
@@ -140,7 +139,7 @@ class DashboardState:
         """Number of items where actual ≠ desired."""
         count = 0
         count += sum(1 for s in self.servers if s.status != "ready" and s.status != "configured")
-        count += sum(1 for s in self.skills if s.status not in ("linked", "installed", "disabled"))
+        count += sum(1 for s in self.skills if s.status not in ("linked", "enabled", "disabled"))
         count += sum(1 for p in self.plugins if not p.installed)
         count += sum(1 for lsp in self.lsp_servers if not lsp.binary_ok)
         return count
@@ -197,48 +196,97 @@ def _check_env_vars(entry: dict) -> bool:
     return True
 
 
+def _copilot_config_path() -> Path:
+    """Return the path to ~/.copilot/config.json."""
+    return home_dir() / ".copilot" / "config.json"
+
+
 def _get_installed_plugins() -> dict[str, dict[str, object]]:
-    """Query ``copilot plugin list`` and parse installed plugins.
+    """Read installed plugins from ``~/.copilot/config.json``.
 
-    Returns {name: {"version": str, "disabled": bool, "source": str}}.
-    Empty dict on failure.
+    Returns {name: {"version": str, "disabled": bool, "source": str,
+    "cache_path": str}}. Empty dict on failure.
+
+    We read config.json directly rather than parsing ``copilot plugin list``
+    output because the CLI format varies (marketplace plugins use
+    ``name@source`` while local plugins are bare), strips the ``cache_path``
+    field we need, and encodes the bullet glyph inconsistently on Windows.
     """
-    if not shutil.which("copilot"):
-        return {}
+    import json
 
-    import re
-    import subprocess
+    cfg_path = _copilot_config_path()
+    if not cfg_path.is_file():
+        return {}
 
     try:
-        result = subprocess.run(
-            ["copilot", "plugin", "list"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return {}
-    except (subprocess.TimeoutExpired, OSError):
+        data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
         return {}
 
+    enabled_map = data.get("enabledPlugins", {}) or {}
     plugins: dict[str, dict[str, object]] = {}
-    # Accept two formats:
-    #   "  • name@source (vX.Y.Z)"           (marketplace)
-    #   "  • name (vX.Y.Z) [disabled]"       (local, may or may not have [disabled])
-    # Bullet glyph may be garbled by console encoding (ΓÇó, â€¢, etc.), so we
-    # allow 1-3 non-whitespace chars between leading spaces and the name.
-    pattern = re.compile(r"^\s*\S{1,3}\s+([A-Za-z0-9_.-]+)(?:@(\S+))?\s+\(v([\d.]+)\)(.*)$")
-    for line in result.stdout.splitlines():
-        m = pattern.match(line)
-        if not m:
+    for entry in data.get("installedPlugins", []) or []:
+        if not isinstance(entry, dict):
             continue
-        name, source, version, trailer = m.groups()
+        name = entry.get("name")
+        if not name:
+            continue
+        marketplace = entry.get("marketplace", "") or "local"
+        # Check both per-entry "enabled" field and the enabledPlugins map
+        enabled = entry.get("enabled", True)
+        for key in (name, f"{name}@{marketplace}"):
+            if key in enabled_map:
+                enabled = bool(enabled_map[key])
+                break
         plugins[name] = {
-            "version": version,
-            "disabled": "[disabled]" in (trailer or ""),
-            "source": source or "local",
+            "version": entry.get("version", ""),
+            "disabled": not enabled,
+            "source": marketplace,
+            "cache_path": entry.get("cache_path", ""),
         }
     return plugins
+
+
+def set_plugin_enabled(name: str, enabled: bool) -> bool:
+    """Enable or disable a plugin by editing ``~/.copilot/config.json``.
+
+    Updates both ``installedPlugins[].enabled`` and the ``enabledPlugins`` map.
+    Returns True on success.
+    """
+    import json
+
+    cfg_path = _copilot_config_path()
+    if not cfg_path.is_file():
+        return False
+
+    try:
+        data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+
+    found = False
+    marketplace = "local"
+    for entry in data.get("installedPlugins", []) or []:
+        if isinstance(entry, dict) and entry.get("name") == name:
+            entry["enabled"] = enabled
+            marketplace = entry.get("marketplace", "") or "local"
+            found = True
+            break
+    if not found:
+        return False
+
+    enabled_map = data.setdefault("enabledPlugins", {})
+    # Prefer existing key form so we update in place
+    key = f"{name}@{marketplace}" if f"{name}@{marketplace}" in enabled_map else name
+    if key not in enabled_map:
+        key = f"{name}@{marketplace}"
+    enabled_map[key] = enabled
+
+    try:
+        cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError:
+        return False
+    return True
 
 
 def _discover_plugin_contents(plugin_dir: Path) -> tuple[str, list[str], list[str], list[str]]:
