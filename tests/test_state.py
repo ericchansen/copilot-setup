@@ -35,29 +35,39 @@ class TestSourceInfo:
 class TestServerInfo:
     def test_http_status(self):
         srv = ServerInfo(name="s", source="src", server_type="http")
-        assert srv.status == "configured"
+        assert srv.status == "enabled"
 
     def test_local_ready(self):
         srv = ServerInfo(name="s", source="src", server_type="local", built=True)
-        assert srv.status == "ready"
+        assert srv.status == "enabled"
 
     def test_local_needs_build(self):
         srv = ServerInfo(name="s", source="src", server_type="local", built=False)
-        assert srv.status == "needs build"
+        assert srv.status == "broken"
+        assert srv.reason == "build pending"
 
     def test_env_missing(self):
-        srv = ServerInfo(name="s", source="src", server_type="local", built=True, env_ok=False)
-        assert srv.status == "env missing"
+        srv = ServerInfo(
+            name="s",
+            source="src",
+            server_type="local",
+            built=True,
+            env_ok=False,
+            missing_env_var="FOO",
+        )
+        assert srv.status == "broken"
+        assert srv.reason == "env: FOO"
 
 
 class TestSkillInfo:
     def test_linked(self):
         skill = SkillInfo(name="sk", source="src", is_linked=True, link_ok=True)
-        assert skill.status == "linked"
+        assert skill.status == "enabled"
 
     def test_broken(self):
         skill = SkillInfo(name="sk", source="src", is_linked=True, link_ok=False)
         assert skill.status == "broken"
+        assert skill.reason == "dangling link"
 
     def test_missing(self):
         skill = SkillInfo(name="sk", source="src")
@@ -98,7 +108,7 @@ class TestPluginInfo:
 class TestLspInfo:
     def test_ready(self):
         lsp = LspInfo(name="ts", command="tsc", binary_ok=True)
-        assert lsp.status == "ready"
+        assert lsp.status == "enabled"
 
     def test_missing(self):
         lsp = LspInfo(name="ts", command="tsc", binary_ok=False)
@@ -137,16 +147,16 @@ class TestDashboardState:
 
 class TestHelpers:
     def test_check_env_vars_empty(self):
-        assert _check_env_vars({}) is True
-        assert _check_env_vars({"command": "node"}) is True
+        assert _check_env_vars({}) == (True, "")
+        assert _check_env_vars({"command": "node"}) == (True, "")
 
     def test_check_env_vars_with_values(self):
         with patch.dict("os.environ", {"MY_VAR": "set"}):
-            assert _check_env_vars({"env": {"MY_VAR": "$MY_VAR"}}) is True
+            assert _check_env_vars({"env": {"MY_VAR": "$MY_VAR"}}) == (True, "")
 
     def test_check_env_vars_missing(self):
         with patch.dict("os.environ", {}, clear=True):
-            assert _check_env_vars({"env": {"MISSING": "$MISSING_VAR"}}) is False
+            assert _check_env_vars({"env": {"MISSING": "$MISSING_VAR"}}) == (False, "MISSING_VAR")
 
     def test_discover_plugin_contents(self, tmp_path):
         """Scan a synthetic plugin directory for skills, servers, agents."""
@@ -227,9 +237,7 @@ class TestSetPluginEnabled:
 
         cfg = self._write_config(
             tmp_path,
-            installed=[
-                {"name": "maenifold", "marketplace": "maenifold-marketplace", "enabled": False}
-            ],
+            installed=[{"name": "maenifold", "marketplace": "maenifold-marketplace", "enabled": False}],
             enabled_plugins={},
         )
         with patch.object(state, "_copilot_config_path", return_value=cfg):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from textual.widgets import DataTable
 
 from copilotsetup.state import DashboardState
+from copilotsetup.widgets.status_render import reason_cell, status_cell
 
 
 def populate_skill_table(table: DataTable, state: DashboardState) -> None:
@@ -16,6 +17,7 @@ def populate_skill_table(table: DataTable, state: DashboardState) -> None:
         table.add_row(
             skill.name,
             skill.source,
-            skill.status,
+            status_cell(skill.state),
+            reason_cell(skill.reason),
             key=skill.name,
         )

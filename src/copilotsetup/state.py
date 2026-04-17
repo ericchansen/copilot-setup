@@ -9,10 +9,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from copilotsetup.platform_ops import get_link_target, home_dir, is_link, validate_lsp_binary
 from copilotsetup.skills import get_skill_folders
 from copilotsetup.sources import ConfigSource, MergedConfig, discover_sources, load_source, merge_sources
+
+# ---------------------------------------------------------------------------
+# Unified status vocabulary — every entity reports one of four states plus
+# an optional ``reason`` string with details (e.g., "env: FOO", "build pending").
+# ---------------------------------------------------------------------------
+
+Status = Literal["enabled", "disabled", "missing", "broken"]
+
+# States that count as "drift" (need user attention)
+_DRIFT_STATES: frozenset[Status] = frozenset(("missing", "broken"))
+
 
 # ---------------------------------------------------------------------------
 # Per-item info dataclasses
@@ -44,27 +56,47 @@ class ServerInfo:
     configured: bool = True  # always True if it's in merged config
     built: bool = False  # local path on disk (for buildable servers)
     env_ok: bool = True  # environment variables present
+    missing_env_var: str = ""  # name of the missing env var, if any
     from_plugin: bool = False  # contributed by an installed plugin's .mcp.json
     plugin_installed: bool = False
     plugin_disabled: bool = False
 
     @property
-    def status(self) -> str:
+    def state(self) -> Status:
         if self.from_plugin:
             if not self.plugin_installed:
                 return "missing"
             if self.plugin_disabled:
                 return "disabled"
             if not self.env_ok:
-                return "env missing"
+                return "broken"
             return "enabled"
         if not self.env_ok:
-            return "env missing"
+            return "broken"
         if self.server_type == "http":
-            return "configured"
+            return "enabled"
         if self.built:
-            return "ready"
-        return "needs build"
+            return "enabled"
+        return "broken"
+
+    @property
+    def reason(self) -> str:
+        if not self.env_ok and self.missing_env_var:
+            return f"env: {self.missing_env_var}"
+        if not self.env_ok:
+            return "env missing"
+        if self.from_plugin and not self.plugin_installed:
+            return "plugin not installed"
+        if self.from_plugin and self.plugin_disabled:
+            return "plugin disabled"
+        if self.server_type == "local" and not self.built:
+            return "build pending"
+        return ""
+
+    # Backward-compat alias for existing callers/tests
+    @property
+    def status(self) -> Status:
+        return self.state
 
 
 @dataclass
@@ -80,12 +112,24 @@ class SkillInfo:
     plugin_disabled: bool = False
 
     @property
-    def status(self) -> str:
+    def state(self) -> Status:
         if self.is_linked:
-            return "linked" if self.link_ok else "broken"
+            return "enabled" if self.link_ok else "broken"
         if self.plugin_installed:
             return "disabled" if self.plugin_disabled else "enabled"
         return "missing"
+
+    @property
+    def reason(self) -> str:
+        if self.is_linked and not self.link_ok:
+            return "dangling link"
+        if not self.is_linked and not self.plugin_installed:
+            return "not linked"
+        return ""
+
+    @property
+    def status(self) -> Status:
+        return self.state
 
 
 @dataclass
@@ -105,10 +149,20 @@ class PluginInfo:
     bundled_agents: list[str] = field(default_factory=list)
 
     @property
-    def status(self) -> str:
-        if self.installed:
-            return "disabled" if self.disabled else "enabled"
-        return "missing"
+    def state(self) -> Status:
+        if not self.installed:
+            return "missing"
+        return "disabled" if self.disabled else "enabled"
+
+    @property
+    def reason(self) -> str:
+        if not self.installed:
+            return "not installed"
+        return ""
+
+    @property
+    def status(self) -> Status:
+        return self.state
 
 
 @dataclass
@@ -120,10 +174,16 @@ class LspInfo:
     binary_ok: bool = False
 
     @property
-    def status(self) -> str:
-        if self.binary_ok:
-            return "ready"
-        return "missing"
+    def state(self) -> Status:
+        return "enabled" if self.binary_ok else "missing"
+
+    @property
+    def reason(self) -> str:
+        return "" if self.binary_ok else "binary not found"
+
+    @property
+    def status(self) -> Status:
+        return self.state
 
 
 # ---------------------------------------------------------------------------
@@ -147,13 +207,14 @@ class DashboardState:
 
     @property
     def drift_count(self) -> int:
-        """Number of items where actual ≠ desired."""
-        count = 0
-        count += sum(1 for s in self.servers if s.status not in ("ready", "configured", "enabled", "disabled"))
-        count += sum(1 for s in self.skills if s.status not in ("linked", "enabled", "disabled"))
-        count += sum(1 for p in self.plugins if not p.installed)
-        count += sum(1 for lsp in self.lsp_servers if not lsp.binary_ok)
-        return count
+        """Number of items in a drift state (``missing`` or ``broken``)."""
+        items: list[ServerInfo | SkillInfo | PluginInfo | LspInfo] = [
+            *self.servers,
+            *self.skills,
+            *self.plugins,
+            *self.lsp_servers,
+        ]
+        return sum(1 for it in items if it.state in _DRIFT_STATES)
 
     @property
     def summary_text(self) -> str:
@@ -194,8 +255,8 @@ def _find_plugin_source(name: str, sources: list[ConfigSource]) -> str:
     return "unknown"
 
 
-def _check_env_vars(entry: dict) -> bool:
-    """Check if all environment variables referenced in a server entry are set."""
+def _check_env_vars(entry: dict) -> tuple[bool, str]:
+    """Check if all env vars in a server entry are set. Returns ``(ok, first_missing)``."""
     import os
 
     env = entry.get("env", {})
@@ -203,8 +264,8 @@ def _check_env_vars(entry: dict) -> bool:
         if isinstance(value, str) and value.startswith("$"):
             var_name = value.lstrip("$").strip("{}")
             if not os.environ.get(var_name):
-                return False
-    return True
+                return False, var_name
+    return True, ""
 
 
 def _copilot_config_path() -> Path:
@@ -488,13 +549,15 @@ def load_dashboard_state() -> DashboardState:
             if local_path:
                 built = Path(local_path).is_dir()
 
+        env_ok, missing_var = _check_env_vars(entry)
         state.servers.append(
             ServerInfo(
                 name=name,
                 source=source_name,
                 server_type=server_type,
                 built=built,
-                env_ok=_check_env_vars(entry),
+                env_ok=env_ok,
+                missing_env_var=missing_var,
             )
         )
 
@@ -674,13 +737,15 @@ def load_dashboard_state() -> DashboardState:
                 continue
             existing_server_names.add(srv_name)
             server_type = "http" if "url" in entry else "local"
+            env_ok, missing_var = _check_env_vars(entry)
             state.servers.append(
                 ServerInfo(
                     name=srv_name,
                     source=plugin.name,
                     server_type=server_type,
                     built=True,
-                    env_ok=_check_env_vars(entry),
+                    env_ok=env_ok,
+                    missing_env_var=missing_var,
                     from_plugin=True,
                     plugin_installed=plugin.installed,
                     plugin_disabled=plugin.disabled,

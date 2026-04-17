@@ -5,6 +5,7 @@ from __future__ import annotations
 from textual.widgets import DataTable
 
 from copilotsetup.state import DashboardState
+from copilotsetup.widgets.status_render import reason_cell, status_cell
 
 
 def populate_plugin_table(table: DataTable, state: DashboardState) -> None:
@@ -14,7 +15,8 @@ def populate_plugin_table(table: DataTable, state: DashboardState) -> None:
         table.add_row(
             plugin.name,
             plugin.source,
-            plugin.status,
+            status_cell(plugin.state),
             plugin.version or "—",
+            reason_cell(plugin.reason),
             key=plugin.name,
         )

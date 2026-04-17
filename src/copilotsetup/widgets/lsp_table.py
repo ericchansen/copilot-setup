@@ -5,6 +5,7 @@ from __future__ import annotations
 from textual.widgets import DataTable
 
 from copilotsetup.state import DashboardState
+from copilotsetup.widgets.status_render import reason_cell, status_cell
 
 
 def populate_lsp_table(table: DataTable, state: DashboardState) -> None:
@@ -14,6 +15,7 @@ def populate_lsp_table(table: DataTable, state: DashboardState) -> None:
         table.add_row(
             lsp.name,
             lsp.command,
-            lsp.status,
+            status_cell(lsp.state),
+            reason_cell(lsp.reason),
             key=lsp.name,
         )

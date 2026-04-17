@@ -60,19 +60,19 @@ class CopilotSetupApp(App):
                 yield DetailPane(id="source-detail")
             with TabPane("MCP Servers", id="servers"), Horizontal(classes="tab-layout"):
                 with Vertical(classes="list-panel"):
-                    yield _make_table("server", ["Name", "Source", "Type", "Status"])
+                    yield _make_table("server", ["Name", "Source", "Type", "Status", "Reason"])
                 yield DetailPane(id="server-detail")
             with TabPane("Skills", id="skills"), Horizontal(classes="tab-layout"):
                 with Vertical(classes="list-panel"):
-                    yield _make_table("skill", ["Name", "Source", "Status"])
+                    yield _make_table("skill", ["Name", "Source", "Status", "Reason"])
                 yield DetailPane(id="skill-detail")
             with TabPane("Plugins", id="plugins"), Horizontal(classes="tab-layout"):
                 with Vertical(classes="list-panel"):
-                    yield _make_table("plugin", ["Name", "Source", "Status", "Version"])
+                    yield _make_table("plugin", ["Name", "Source", "Status", "Version", "Reason"])
                 yield DetailPane(id="plugin-detail")
             with TabPane("LSP", id="lsp"), Horizontal(classes="tab-layout"):
                 with Vertical(classes="list-panel"):
-                    yield _make_table("lsp", ["Name", "Command", "Status"])
+                    yield _make_table("lsp", ["Name", "Command", "Status", "Reason"])
                 yield DetailPane(id="lsp-detail")
         yield _status_bar()
         yield Footer()
@@ -229,8 +229,10 @@ class CopilotSetupApp(App):
         meta = [
             f"Source: {srv.source}",
             f"Type: {srv.server_type}",
-            f"Status: {srv.status}",
+            f"Status: {srv.state}",
         ]
+        if srv.reason:
+            meta.append(f"Reason: {srv.reason}")
         if not srv.env_ok:
             meta.append("⚠ Environment variables missing")
         if srv.built:
@@ -247,9 +249,11 @@ class CopilotSetupApp(App):
 
         meta = [
             f"Source: {skill.source}",
-            f"Status: {skill.status}",
+            f"Status: {skill.state}",
             f"Linked: {'✓' if skill.is_linked else '✗'}",
         ]
+        if skill.reason:
+            meta.append(f"Reason: {skill.reason}")
         if skill.link_target:
             meta.append(f"Link target: {skill.link_target}")
         if not skill.link_ok and skill.is_linked:
@@ -267,10 +271,12 @@ class CopilotSetupApp(App):
         sections: list[tuple[str, list[str]]] = []
 
         meta = [
-            f"Status: {plugin.status}",
+            f"Status: {plugin.state}",
             f"Version: {plugin.version or '—'}",
             f"Source: {plugin.plugin_source or '—'}",
         ]
+        if plugin.reason:
+            meta.append(f"Reason: {plugin.reason}")
         if plugin.description:
             meta.append(f"Description: {plugin.description}")
         if plugin.install_path:
@@ -293,9 +299,11 @@ class CopilotSetupApp(App):
 
         meta = [
             f"Command: {lsp.command}",
-            f"Status: {lsp.status}",
+            f"Status: {lsp.state}",
             f"Binary found: {'✓' if lsp.binary_ok else '✗'}",
         ]
+        if lsp.reason:
+            meta.append(f"Reason: {lsp.reason}")
         return [("Info", meta)]
 
     # -- Column sorting ---------------------------------------------------------
