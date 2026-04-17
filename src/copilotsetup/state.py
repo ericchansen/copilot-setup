@@ -67,13 +67,14 @@ class SkillInfo:
     link_ok: bool = False
     is_linked: bool = False
     plugin_installed: bool = False
+    plugin_disabled: bool = False
 
     @property
     def status(self) -> str:
         if self.is_linked:
             return "linked" if self.link_ok else "broken"
         if self.plugin_installed:
-            return "installed"
+            return "disabled" if self.plugin_disabled else "installed"
         return "missing"
 
 
@@ -85,6 +86,7 @@ class PluginInfo:
     source: str  # which ConfigSource contributed it
     plugin_source: str = ""  # install source (URL, etc.)
     installed: bool = False
+    disabled: bool = False
     version: str = ""
     description: str = ""
     install_path: str = ""
@@ -95,7 +97,7 @@ class PluginInfo:
     @property
     def status(self) -> str:
         if self.installed:
-            return "installed"
+            return "disabled" if self.disabled else "installed"
         return "missing"
 
 
@@ -138,7 +140,7 @@ class DashboardState:
         """Number of items where actual ≠ desired."""
         count = 0
         count += sum(1 for s in self.servers if s.status != "ready" and s.status != "configured")
-        count += sum(1 for s in self.skills if s.status not in ("linked", "installed"))
+        count += sum(1 for s in self.skills if s.status not in ("linked", "installed", "disabled"))
         count += sum(1 for p in self.plugins if not p.installed)
         count += sum(1 for lsp in self.lsp_servers if not lsp.binary_ok)
         return count
@@ -195,10 +197,11 @@ def _check_env_vars(entry: dict) -> bool:
     return True
 
 
-def _get_installed_plugins() -> dict[str, str]:
+def _get_installed_plugins() -> dict[str, dict[str, object]]:
     """Query ``copilot plugin list`` and parse installed plugins.
 
-    Returns a dict of {name: version}.  Returns empty dict on failure.
+    Returns {name: {"version": str, "disabled": bool, "source": str}}.
+    Empty dict on failure.
     """
     if not shutil.which("copilot"):
         return {}
@@ -218,14 +221,23 @@ def _get_installed_plugins() -> dict[str, str]:
     except (subprocess.TimeoutExpired, OSError):
         return {}
 
-    plugins: dict[str, str] = {}
+    plugins: dict[str, dict[str, object]] = {}
+    # Accept two formats:
+    #   "  • name@source (vX.Y.Z)"           (marketplace)
+    #   "  • name (vX.Y.Z) [disabled]"       (local, may or may not have [disabled])
+    # Bullet glyph may be garbled by console encoding (ΓÇó, â€¢, etc.), so we
+    # allow 1-3 non-whitespace chars between leading spaces and the name.
+    pattern = re.compile(r"^\s*\S{1,3}\s+([A-Za-z0-9_.-]+)(?:@(\S+))?\s+\(v([\d.]+)\)(.*)$")
     for line in result.stdout.splitlines():
-        # Match lines like "  • name@source (vX.Y.Z)".  Bullet char may be
-        # garbled by encoding, so accept any leading punctuation/whitespace
-        # but require the name@source (vX.Y.Z) to be the line's main content.
-        m = re.match(r"^\s*\S{1,3}\s+([A-Za-z0-9_.-]+)@\S+\s+\(v([\d.]+)\)", line)
-        if m:
-            plugins[m.group(1)] = m.group(2)
+        m = pattern.match(line)
+        if not m:
+            continue
+        name, source, version, trailer = m.groups()
+        plugins[name] = {
+            "version": version,
+            "disabled": "[disabled]" in (trailer or ""),
+            "source": source or "local",
+        }
     return plugins
 
 
@@ -455,8 +467,10 @@ def load_dashboard_state() -> DashboardState:
     for name, info in merged.plugins.items():
         source_name = _find_plugin_source(name, raw_sources)
         plugin_source = info.get("source", "")
-        installed = name in installed_plugins
-        version = installed_plugins.get(name, "")
+        meta = installed_plugins.get(name, {})
+        installed = bool(meta)
+        version = str(meta.get("version", "")) if meta else ""
+        disabled = bool(meta.get("disabled", False))
 
         # Discover plugin contents
         description = ""
@@ -476,6 +490,7 @@ def load_dashboard_state() -> DashboardState:
                 source=source_name,
                 plugin_source=plugin_source,
                 installed=installed,
+                disabled=disabled,
                 version=version,
                 description=description,
                 install_path=install_path_str,
@@ -489,8 +504,10 @@ def load_dashboard_state() -> DashboardState:
     for sp in merged.source_plugins:
         name = sp.get("name", "unknown")
         if not any(p.name == name for p in state.plugins):
-            installed = name in installed_plugins
-            version = installed_plugins.get(name, "")
+            meta = installed_plugins.get(name, {})
+            installed = bool(meta)
+            version = str(meta.get("version", "")) if meta else ""
+            disabled = bool(meta.get("disabled", False))
 
             # These are loaded from source paths — scan for contents
             description = ""
@@ -512,6 +529,7 @@ def load_dashboard_state() -> DashboardState:
                     source="self",
                     plugin_source="local",
                     installed=installed,
+                    disabled=disabled,
                     version=version,
                     description=description,
                     install_path=install_path_str,
@@ -538,6 +556,7 @@ def load_dashboard_state() -> DashboardState:
                         link_ok=link_ok,
                         is_linked=is_linked,
                         plugin_installed=plugin.installed,
+                        plugin_disabled=plugin.disabled,
                     )
                 )
 
