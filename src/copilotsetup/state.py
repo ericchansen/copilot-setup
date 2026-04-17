@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from copilotsetup.oauth_status import OAuthStatus, build_status_map, scan_oauth_configs, status_for
 from copilotsetup.platform_ops import get_link_target, home_dir, is_link, validate_lsp_binary
 from copilotsetup.skills import get_skill_folders
 from copilotsetup.sources import ConfigSource, MergedConfig, discover_sources, load_source, merge_sources
@@ -60,6 +61,7 @@ class ServerInfo:
     from_plugin: bool = False  # contributed by an installed plugin's .mcp.json
     plugin_installed: bool = False
     plugin_disabled: bool = False
+    oauth_status: OAuthStatus = "not_applicable"
 
     @property
     def state(self) -> Status:
@@ -89,6 +91,8 @@ class ServerInfo:
             return "plugin not installed"
         if self.from_plugin and self.plugin_disabled:
             return "plugin disabled"
+        if self.server_type == "http" and self.oauth_status == "needs_auth":
+            return "needs OAuth"
         if self.server_type == "local" and not self.built:
             return "build pending"
         return ""
@@ -266,6 +270,20 @@ def _check_env_vars(entry: dict) -> tuple[bool, str]:
             if not os.environ.get(var_name):
                 return False, var_name
     return True, ""
+
+
+def _oauth_status_for(entry: dict, status_map: dict[str, OAuthStatus]) -> OAuthStatus:
+    """Return the OAuth status for a server entry.
+
+    HTTP servers look up their URL in the oauth-config status map. Servers that
+    don't do HTTP auth (stdio servers) return ``not_applicable``.
+    """
+    if "url" not in entry:
+        return "not_applicable"
+    url = entry.get("url", "")
+    if not url:
+        return "not_applicable"
+    return status_for(url, status_map)
 
 
 def _copilot_config_path() -> Path:
@@ -536,6 +554,9 @@ def load_dashboard_state() -> DashboardState:
     merged = merge_sources(raw_sources)
     state.merged = merged
 
+    # OAuth status for HTTP MCP servers (from ~/.copilot/mcp-oauth-config/)
+    oauth_map = build_status_map(scan_oauth_configs())
+
     # Servers
     for name, entry in merged.servers.items():
         if name in merged.disabled_by_default:
@@ -550,6 +571,7 @@ def load_dashboard_state() -> DashboardState:
                 built = Path(local_path).is_dir()
 
         env_ok, missing_var = _check_env_vars(entry)
+        oauth = _oauth_status_for(entry, oauth_map)
         state.servers.append(
             ServerInfo(
                 name=name,
@@ -558,6 +580,7 @@ def load_dashboard_state() -> DashboardState:
                 built=built,
                 env_ok=env_ok,
                 missing_env_var=missing_var,
+                oauth_status=oauth,
             )
         )
 
@@ -738,6 +761,7 @@ def load_dashboard_state() -> DashboardState:
             existing_server_names.add(srv_name)
             server_type = "http" if "url" in entry else "local"
             env_ok, missing_var = _check_env_vars(entry)
+            oauth = _oauth_status_for(entry, oauth_map)
             state.servers.append(
                 ServerInfo(
                     name=srv_name,
@@ -749,6 +773,7 @@ def load_dashboard_state() -> DashboardState:
                     from_plugin=True,
                     plugin_installed=plugin.installed,
                     plugin_disabled=plugin.disabled,
+                    oauth_status=oauth,
                 )
             )
 
