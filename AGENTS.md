@@ -2,50 +2,54 @@
 
 ## Repository Purpose
 
-This is the **configuration engine** for GitHub Copilot CLI, presented as a **Textual TUI
-dashboard**. It discovers, merges, and deploys configuration from multiple sources. The
-engine contains NO configuration data — all data (servers, plugins, skills, instructions)
-comes from config source repos.
+A **read-only Textual TUI dashboard** for GitHub Copilot CLI. It reads `~/.copilot/`
+configuration from disk and presents it in a navigable, filterable, tabbed interface.
+The app does NOT write any config — it's a pure viewer.
 
 ## Architecture
 
 - **Entry point**: `app.py` → `main()` → `CopilotSetupApp`
-- **State layer**: `state.py` computes desired state (from merged sources) + actual state (filesystem)
-- **Source discovery**: `sources.py` reads `~/.copilot/config-sources.json`
-- **Pipeline**: Ordered steps defined in `copilotsetup/steps/__init__.py`
-- **Step protocol**: Each step has `name: str`, `check(ctx) -> bool`, `run(ctx) -> StepResult`
-- **Action screen**: `screens/action_screen.py` runs setup in a threaded worker
-- **Tab widgets**: `widgets/` — populate functions for 5 DataTable tabs
+- **Data layer**: `data/*.py` — one `ReadProvider` per tab (frozen dataclass + `load()`)
+- **Tab layer**: `tabs/*.py` — one `BaseTab` subclass per tab (columns, rows, detail, filter)
+- **Widgets**: `widgets/` — reusable UI components (footer, status bar, detail pane, filter)
+- **Doctor**: `doctor.py` — MCP server health probes (stdio + HTTP), CLI subcommand
+
+### BaseTab / Provider Protocol
+
+Every tab follows the same pattern:
+1. A **data provider** in `data/` defines a frozen `@dataclass` and a `load()` function
+2. A **tab class** in `tabs/` extends `BaseTab[T]` and implements:
+   - `columns` — list of column definitions
+   - `key_for(item)` — unique key for each row
+   - `row_for(item)` — tuple of cell values
+   - `detail_for(item)` — Rich markup for the detail pane
+   - `filter_text(item)` — searchable text for filtering
+
+### Tab Registration
+
+All 11 tabs are registered in `app.py`'s `_TAB_DEFINITIONS` list. Each entry is a
+`(label, TabClass)` tuple. Tab order follows this list.
 
 ## Key Design Decisions
 
-- **Engine/data separation**: No `mcp-servers.json`, no skills, no instructions in this repo
-- **Desired + actual state**: `state.py` computes what should exist AND what does exist, surfacing drift
-- **Threaded workers**: State loading and actions run in `@work(thread=True)`, UI updates via `call_from_thread()`
-- **Steps stay decoupled from Textual**: Steps return `StepResult` via protocol — never import Textual
-- **Additive merging**: MCP servers, plugins, and skills are collected from ALL sources
-- **First-wins merging**: Instructions, portable config, and LSP config take the first source
-- **Server deduplication**: By name — first occurrence wins
-- **Category field stripped**: `load_source()` removes `category` from server definitions
-- **Legacy support**: Sources using `.copilot/` subdir layout are auto-detected
-- **Platform ops**: Windows junctions require special handling — always use `platform_ops.is_link()` / `remove_link()`, never `is_symlink()` / `unlink()` directly
-- **Path prefix matching**: Always use separator-boundary checks (append `/` before `startswith`) to prevent `/agency` matching `/agency2`. See `_under_prefix()` in `steps/skills.py`.
-- **Agency naming**: When an MCP server overlaps with an Agency built-in, use Agency's
-  name so dedup works (e.g., `msft-learn` not `microsoft-learn`). Agency built-in names:
-  `ado`, `bluebird`, `cloudbuild`, `es-chat`, `icm`, `kusto`, `local`, `m365-copilot`,
-  `m365-user`, `mail`, `calendar`, `msft-learn`, `npx`, `planner`, `remote`,
-  `security-context`, `teams`, `word`, `workiq`
+- **Read-only**: No config writes, no source merging, no junction creation
+- **Provider protocol**: `ReadProvider` has `load() -> list[T]`; `WriteProvider` adds `save()`
+- **Frozen dataclasses**: All data items are immutable — no in-place mutation
+- **Load generation tokens**: `_load_gen = itertools.count()` prevents stale async results
+- **Plugin-bundled discovery**: Skills and Agents scan `installed-plugins/*/skills|agents/` too
+- **Tab bar disabled**: `tabs.can_focus = False` in `on_ready()` so arrow keys control content
+- **Rich markup escaping**: `[a]` in footer must be escaped as `\[a]` to avoid Rich tag parsing
 
 ## File Conventions
 
 When editing:
-- `app.py` — TUI entry point. Tabbed dashboard with threaded worker loading.
-- `state.py` — Data layer. Computes `DashboardState` from merged sources + filesystem.
-- `screens/action_screen.py` — Runs setup. Creates SetupContext and uses `runner.run_steps()`.
-- `widgets/` — Pure populate functions that fill DataTable widgets from `DashboardState`.
-- `sources.py` — Core merging logic. If you change merge strategies, update tests.
-- `copilotsetup/steps/` — Each step reads from `ctx` (SetupContext). Steps must not import
-  data directly; they get it from the context which is populated from merged sources.
+- `app.py` — TUI app class, tab registry, global key bindings, doctor subcommand hook
+- `config.py` — Path functions only (no constants). Functions for testability via env var override
+- `data/*.py` — Pure data loading. Each returns `list[FrozenDataclass]`. No Textual imports
+- `tabs/*.py` — UI layer. Each extends `BaseTab[T]`, never loads data directly
+- `widgets/*.py` — Reusable Textual widgets. No data-loading logic
+- `doctor.py` — Self-contained. Reads mcp-config.json via `config.mcp_config_json()`
+- `platform_ops.py` — Read-only platform utilities (link detection, LSP validation)
 
 ## Pre-commit / Pre-push Checklist (MANDATORY)
 

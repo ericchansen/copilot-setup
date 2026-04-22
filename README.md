@@ -1,42 +1,23 @@
 # copilot-setup
 
-A Textual TUI dashboard for GitHub Copilot CLI configuration. Discovers, merges, and
-deploys configuration from multiple sources — and shows you exactly what's configured.
+A read-only Textual TUI dashboard for GitHub Copilot CLI. Shows you exactly what's
+configured — MCP servers, plugins, skills, agents, settings, and more — without
+modifying anything.
+
+![copilot-setup dashboard](docs/screenshot.png)
 
 ## What It Does
 
-`copilot-setup` launches an interactive terminal dashboard that:
+`copilot-setup` reads Copilot CLI's on-disk configuration (`~/.copilot/`) and presents
+it in a navigable, filterable, tabbed dashboard. It's a pure viewer — any Copilot CLI
+user can install it and immediately see what's configured.
 
-- **Shows config state** — sources, MCP servers, skills, plugins, and LSP servers
-- **Detects drift** — compares desired state (from sources) against actual deployed state
-- **Runs actions** — setup via `F5` key binding
-- **Multi-source merging** — additive for servers/skills/plugins, first-wins for instructions
-
-## Multi-Source Architecture
-
-The engine itself contains **no configuration data**. All data comes from config sources — directories on disk containing JSON files and skills.
-
-### Config Sources
-
-Register sources in `~/.copilot/config-sources.json`:
-
-```json
-[
-  {"name": "personal", "path": "~/repos/copilot-config"},
-  {"name": "work",     "path": "~/repos/copilot-config-work"}
-]
-```
-
-Each source is a directory containing any combination of:
-
-| File | Purpose | Merge Strategy |
-|------|---------|----------------|
-| `mcp.json` | MCP server definitions | **Additive** — merged across all sources |
-| `plugins.json` | Copilot CLI plugin definitions | **Additive** — merged across all sources |
-| `lsp-servers.json` | LSP server definitions | **First-wins** — first source providing it |
-| `config.portable.json` | Portable settings | **First-wins** |
-| `copilot-instructions.md` | Global instructions | **First-wins** |
-| `skills/` | Directory of skills (each with SKILL.md) | **Additive** — all skills linked |
+- **11 tabs** — Plugins, MCP Servers, Skills, Agents, LSP Servers, Extensions,
+  Hooks, Permissions, Profiles, Environment, Settings
+- **Plugin management** — toggle enable/disable, detect upgrades, install/remove
+- **Filter** — press `/` to search across any tab
+- **Detail pane** — highlight a row to see full details
+- **Doctor** — `copilot-setup doctor` probes each MCP server (stdio + HTTP) and reports health
 
 ## Installation
 
@@ -44,20 +25,15 @@ Each source is a directory containing any combination of:
 pip install -e ~/repos/copilot-setup
 ```
 
+Requires Python ≥ 3.11 and [Textual](https://textual.textualize.io/) ≥ 1.0.
+
 ## Usage
 
 ```bash
 # Launch the TUI dashboard
 copilot-setup
 
-# Check config-source repos for upstream updates
-copilot-setup update
-
-# Fast-forward pull any sources that are behind
-copilot-setup update --apply
-
-# Probe MCP servers live (spawn/HTTP initialize); shows ok / timeout /
-# needs_oauth / etc. per server.
+# Probe MCP servers for health (ok / timeout / needs_oauth / etc.)
 copilot-setup doctor
 ```
 
@@ -65,20 +41,16 @@ copilot-setup doctor
 
 | Key | Action |
 |-----|--------|
-| `F5` | Run setup (discover, merge, deploy) |
-| `R` | Refresh dashboard state |
-| `T` | Enable / disable plugin (Plugins tab) |
-| `U` | Upgrade plugin (Plugins tab) |
-| `X` | Uninstall plugin (Plugins tab) |
-| `Q` | Quit |
+| `←` / `→` | Switch tabs |
+| `↑` / `↓` | Navigate rows |
+| `/` | Filter current tab |
+| `Escape` | Clear filter |
+| `r` | Refresh data from disk |
+| `?` | Help overlay |
+| `q` | Quit |
 
-The dashboard has 5 tabs: **Sources**, **MCP Servers**, **Skills**, **Plugins**, **LSP**.
-
-## Known issues and gotchas
-
-- [MCP OAuth and Copilot CLI plugins](docs/mcp-oauth-and-plugins.md) — HTTP MCPs
-  declared inside a plugin do not auto-trigger Copilot CLI's OAuth flow. Covers
-  the diagnosis and two workarounds.
+**Plugins tab:** `a` add, `x` remove, `t` toggle, `u` upgrade, `m` marketplace
+**MCP Servers tab:** `a` add, `x` remove
 
 ## Development
 
@@ -103,27 +75,36 @@ python -m ruff check . && python -m ruff format --check . && python -m pytest te
 
 ```
 src/copilotsetup/
-  app.py                ← TUI entry point (Textual App, tabbed dashboard)
+  app.py                ← TUI entry point (CopilotSetupApp, 11-tab dashboard)
   app.tcss              ← Textual CSS stylesheet
-  state.py              ← Desired + actual state computation (data layer)
+  config.py             ← Path functions (copilot_home, mcp_config_json, etc.)
+  doctor.py             ← MCP server health probes (stdio + HTTP)
+  platform_ops.py       ← Cross-platform link detection, LSP binary validation
+  data/
+    base.py             ← ReadProvider / WriteProvider protocols
+    environment.py      ← Environment tab data (Copilot home, paths, versions)
+    mcp_servers.py      ← MCP server entries from mcp-config.json
+    plugins.py          ← Installed/enabled plugins from config.json
+    skills.py           ← Skills from ~/.copilot/skills/ + plugin-bundled
+    agents.py           ← Agents from ~/.copilot/agents/ + plugin-bundled
+    settings.py         ← Config.json settings (non-structural keys)
+    hooks.py            ← Git hooks from config.json
+    permissions.py      ← Trusted folders, allowed/denied URLs
+    profiles.py         ← Copilot profiles with active detection
+    extensions.py       ← VS Code extensions from ~/.copilot/extensions/
+    lsp_servers.py      ← LSP servers from lsp-config.json
+  tabs/
+    base.py             ← BaseTab abstract class (item-based, filterable)
+    environment.py … lsp_servers.py  ← One tab class per data provider
   screens/
-    action_screen.py    ← Action execution screen (setup)
+    help_screen.py      ← Modal help overlay (? key)
   widgets/
-    source_table.py     ← Sources tab population
-    server_table.py     ← MCP Servers tab population
-    skill_table.py      ← Skills tab population
-    plugin_table.py     ← Plugins tab population
-    lsp_table.py        ← LSP tab population
-  models.py             ← SetupContext, StepResult, Summary, UIProtocol
-  runner.py             ← Step protocol + pipeline runner (used by actions)
-  ui.py                 ← Terminal UI rendering (used internally by runner)
-  sources.py            ← Config source discovery & merging
-  config.py             ← MCP/LSP config generation
-  skills.py             ← Skill discovery, linking, plugin management
-  platform_ops.py       ← Cross-platform symlinks, junctions
-  git_helpers.py        ← Git authentication detection
-  optional_deps.py      ← Interactive optional dependency installs
-  build_detect.py       ← Build system detection for MCP servers
-  init.py               ← Onboarding wizard (copilot-setup init)
-  steps/                ← 15 individual setup steps
+    footer_bar.py       ← Bottom bar with action key indicators
+    status_bar.py       ← Top bar with item count + filter state
+    detail_pane.py      ← Right panel showing selected item details
+    filter_input.py     ← Filter text input widget
+    status_render.py    ← Rich markup helpers for status/reason cells
+  utils/
+    file_io.py          ← read_json / read_text helpers
+    cli.py              ← run_copilot() subprocess wrapper
 ```
