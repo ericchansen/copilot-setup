@@ -1,13 +1,14 @@
-"""Shared status rendering helpers — unified 4-state vocabulary."""
+"""Shared status rendering — colored Rich cells for health/status columns."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from rich.text import Text
 
-from copilotsetup.state import Status
+Status = Literal["enabled", "disabled", "missing", "broken"]
 
-# Terminal-friendly colors for each state.
-_STATE_COLORS: dict[Status, str] = {
+_COLORS: dict[Status, str] = {
     "enabled": "green",
     "disabled": "bright_black",
     "missing": "yellow",
@@ -16,10 +17,10 @@ _STATE_COLORS: dict[Status, str] = {
 
 
 def status_cell(state: Status) -> Text:
-    """Return a Rich ``Text`` object with the state colored appropriately."""
-    return Text(state, style=_STATE_COLORS.get(state, ""))
+    """Rich ``Text`` with the state colored appropriately."""
+    return Text(state, style=_COLORS.get(state, ""))
 
 
 def reason_cell(reason: str) -> Text:
-    """Return a Rich ``Text`` object for the reason column (muted)."""
+    """Rich ``Text`` for the reason column (muted)."""
     return Text(reason, style="dim")

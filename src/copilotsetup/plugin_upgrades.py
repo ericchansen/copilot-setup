@@ -1,28 +1,20 @@
-"""Background plugin upgrade detection — git-backed plugins, tag mode only.
+"""Plugin upgrade detection — git-backed plugins, tag mode.
 
-Copilot CLI installs plugins as detached HEAD checkouts at a version tag (e.g.
-``v0.11.2``), so detection compares the current tag against the highest semver
-tag on ``origin``. Only the badge in the UI's Upgrade column is driven from
-this; the actual upgrade is performed by ``copilot plugin update <name>``.
-
-Plugins that aren't git checkouts (marketplace, direct copy) are surfaced as
-``STATUS_NOT_GIT`` and produce no badge.
+Copilot CLI installs plugins as detached HEAD checkouts at a version tag
+(e.g. ``v0.11.2``).  Detection compares the current tag against the highest
+semver tag on ``origin``.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from copilotsetup.update_sources import is_git_checkout, run_git
+_SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
-if TYPE_CHECKING:
-    from copilotsetup.state import PluginInfo
-
-# Status values for a plugin upgrade check
 STATUS_UP_TO_DATE = "up-to-date"
 STATUS_UPGRADABLE = "upgradable"
 STATUS_NOT_GIT = "not-git"
@@ -51,13 +43,17 @@ class PluginUpgradeInfo:
         return f"↑ {self.latest_version}" if self.upgrade_available else ""
 
 
-_SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+def _run_git(args: list[str], cwd: Path, *, timeout: float = 30.0) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
 
 
 def _parse_semver(tag: str) -> tuple[int, int, int] | None:
-    """Parse ``vM.m.p`` / ``M.m.p`` into a sortable tuple. Returns None for
-    pre-release tags (``v1.0.0-rc1``) or anything non-semver.
-    """
     match = _SEMVER_RE.match(tag.strip())
     if match is None:
         return None
@@ -65,12 +61,7 @@ def _parse_semver(tag: str) -> tuple[int, int, int] | None:
 
 
 def _get_current_tag(path: Path) -> str | None:
-    """Return the tag HEAD points at (exact match), or None if not on a tag."""
-    result = run_git(
-        ["describe", "--tags", "--exact-match", "HEAD"],
-        path,
-        timeout=5.0,
-    )
+    result = _run_git(["describe", "--tags", "--exact-match", "HEAD"], path, timeout=5.0)
     if result.returncode != 0:
         return None
     tag = result.stdout.strip()
@@ -78,10 +69,7 @@ def _get_current_tag(path: Path) -> str | None:
 
 
 def _list_remote_tags(path: Path) -> list[str]:
-    """List tag names on ``origin`` via ``git ls-remote --tags``. Skips peel
-    variants (``^{}``). Returns empty list on any error.
-    """
-    result = run_git(["ls-remote", "--tags", "origin"], path, timeout=10.0)
+    result = _run_git(["ls-remote", "--tags", "origin"], path, timeout=10.0)
     if result.returncode != 0:
         return []
     tags: list[str] = []
@@ -93,14 +81,12 @@ def _list_remote_tags(path: Path) -> list[str]:
         if ref.endswith("^{}"):
             continue
         prefix = "refs/tags/"
-        if not ref.startswith(prefix):
-            continue
-        tags.append(ref[len(prefix) :])
+        if ref.startswith(prefix):
+            tags.append(ref[len(prefix) :])
     return tags
 
 
 def _highest_semver_tag(tags: list[str]) -> str | None:
-    """Return the highest-semver tag from ``tags``, or None if none parse."""
     parsed = [(t, _parse_semver(t)) for t in tags]
     valid = [(t, v) for t, v in parsed if v is not None]
     if not valid:
@@ -109,32 +95,31 @@ def _highest_semver_tag(tags: list[str]) -> str | None:
     return valid[-1][0]
 
 
-def check_plugin_upgrade(plugin: PluginInfo) -> PluginUpgradeInfo:
-    """Check one plugin for an available upgrade (tag-based comparison).
+def check_plugin(install_path: str, name: str) -> PluginUpgradeInfo:
+    """Check one plugin for an available upgrade (tag-based comparison)."""
+    path = Path(install_path) if install_path else None
+    info = PluginUpgradeInfo(name=name, path=path, status=STATUS_ERROR)
 
-    Returns a ``PluginUpgradeInfo`` with the upgrade status. Never raises —
-    network or git errors are captured in the ``detail`` field.
-    """
-    name = plugin.name
-    install_path = Path(plugin.install_path) if plugin.install_path else None
-    info = PluginUpgradeInfo(name=name, path=install_path, status=STATUS_ERROR)
-
-    if install_path is None or not str(install_path):
+    if path is None or not install_path:
         info.status = STATUS_NO_PATH
-        info.detail = "plugin has no install path"
+        info.detail = "no install path"
         return info
 
-    if not install_path.exists():
+    if not path.exists():
         info.status = STATUS_NO_PATH
-        info.detail = f"install path does not exist: {install_path}"
+        info.detail = f"path does not exist: {path}"
         return info
 
-    if not is_git_checkout(install_path):
+    try:
+        result = _run_git(["rev-parse", "--is-inside-work-tree"], path, timeout=5.0)
+        if result.returncode != 0:
+            raise ValueError("not a work tree")
+    except Exception:
         info.status = STATUS_NOT_GIT
-        info.detail = "install path is not a git checkout"
+        info.detail = "not a git checkout"
         return info
 
-    current = _get_current_tag(install_path)
+    current = _get_current_tag(path)
     if current is None:
         info.status = STATUS_NO_UPSTREAM
         info.detail = "HEAD is not on a version tag"
@@ -143,7 +128,7 @@ def check_plugin_upgrade(plugin: PluginInfo) -> PluginUpgradeInfo:
     info.current_version = current
 
     try:
-        fetch = run_git(["fetch", "--tags", "--quiet"], install_path, timeout=10.0)
+        fetch = _run_git(["fetch", "--tags", "--quiet"], path, timeout=10.0)
     except Exception as exc:
         info.status = STATUS_ERROR
         info.detail = f"git fetch raised: {exc}"
@@ -151,10 +136,10 @@ def check_plugin_upgrade(plugin: PluginInfo) -> PluginUpgradeInfo:
 
     if fetch.returncode != 0:
         info.status = STATUS_ERROR
-        info.detail = f"git fetch --tags failed: {fetch.stderr.strip() or fetch.stdout.strip()}"
+        info.detail = f"git fetch failed: {(fetch.stderr or fetch.stdout).strip()}"
         return info
 
-    remote_tags = _list_remote_tags(install_path)
+    remote_tags = _list_remote_tags(path)
     latest = _highest_semver_tag(remote_tags) if remote_tags else None
     if latest is None:
         info.status = STATUS_NO_UPSTREAM
@@ -178,22 +163,15 @@ def check_plugin_upgrade(plugin: PluginInfo) -> PluginUpgradeInfo:
     return info
 
 
-def check_all_plugins(
-    plugins: list[PluginInfo],
+def check_all(
+    plugins: list[tuple[str, str]],
     progress_cb: Callable[[int, int, str], None] | None = None,
 ) -> list[PluginUpgradeInfo]:
-    """Run :func:`check_plugin_upgrade` serially for every installed plugin.
-
-    ``progress_cb`` is called as ``(index, total, plugin_name)`` before each
-    check so callers can update a status bar. Plugins that aren't installed
-    are skipped entirely.
-    """
+    """Check all plugins for upgrades. ``plugins`` is a list of (name, install_path)."""
     results: list[PluginUpgradeInfo] = []
     total = len(plugins)
-    for i, plugin in enumerate(plugins, start=1):
+    for i, (name, install_path) in enumerate(plugins, start=1):
         if progress_cb is not None:
-            progress_cb(i, total, plugin.name)
-        if not plugin.installed:
-            continue
-        results.append(check_plugin_upgrade(plugin))
+            progress_cb(i, total, name)
+        results.append(check_plugin(install_path, name))
     return results

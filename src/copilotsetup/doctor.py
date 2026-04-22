@@ -1,13 +1,7 @@
-"""Health probes for MCP servers and other deployed resources.
+"""Health probes for MCP servers.
 
-The ``doctor`` module exposes pure functions that probe the *actual* live state of
-deployed MCP servers (stdio and HTTP). It is used by the ``copilot-setup doctor``
-subcommand and (future) by the TUI Health column.
-
-Design choices:
-- Probes run **serially** for cleaner output and easier debugging.
-- Default **2-second timeout** per probe; misbehaving servers never hang the CLI.
-- Results are dataclasses — render/display lives elsewhere.
+The ``doctor`` module probes live MCP servers (stdio and HTTP) and reports
+their status.  Used by ``copilot-setup doctor`` CLI subcommand.
 """
 
 from __future__ import annotations
@@ -16,10 +10,14 @@ import json
 import logging
 import os
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Literal
+
+from copilotsetup.config import mcp_config_json
+from copilotsetup.utils.file_io import read_json
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +48,13 @@ class HealthInfo:
     missing_env: list[str] = field(default_factory=list)
 
 
-# -- stdio probes --------------------------------------------------------------
+# -- env helpers ---------------------------------------------------------------
 
 
-def _build_env(env_overrides: dict[str, str] | None) -> tuple[dict[str, str], list[str]]:
-    """Merge process env with overrides; return (env, missing) where missing lists
-    variables referenced as ``${VAR}`` or ``$VAR`` whose value isn't in the
-    parent env."""
+def _build_env(
+    env_overrides: dict[str, str] | None,
+) -> tuple[dict[str, str], list[str]]:
+    """Merge process env with overrides; return (env, missing)."""
     env = os.environ.copy()
     missing: list[str] = []
     if not env_overrides:
@@ -79,6 +77,19 @@ def _build_env(env_overrides: dict[str, str] | None) -> tuple[dict[str, str], li
     return env, missing
 
 
+class _suppress_errors:
+    """Context manager: suppress everything except KeyboardInterrupt."""
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return exc_type is not None and not issubclass(exc_type, KeyboardInterrupt)
+
+
+# -- stdio probes --------------------------------------------------------------
+
+
 def probe_stdio(
     name: str,
     command: str,
@@ -86,9 +97,7 @@ def probe_stdio(
     env_overrides: dict[str, str] | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> HealthInfo:
-    """Spawn an MCP stdio server, send ``initialize``, and classify the response."""
-    import time
-
+    """Spawn an MCP stdio server, send ``initialize``, classify the response."""
     args = args or []
     env, missing = _build_env(env_overrides)
     info = HealthInfo(name=name, server_type="local", health="unknown", missing_env=list(missing))
@@ -166,16 +175,6 @@ def probe_stdio(
     return info
 
 
-class _suppress_errors:
-    """Small context manager: suppress everything except KeyboardInterrupt."""
-
-    def __enter__(self) -> None:
-        return None
-
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return exc_type is not None and not issubclass(exc_type, KeyboardInterrupt)
-
-
 # -- HTTP probes ---------------------------------------------------------------
 
 
@@ -185,13 +184,7 @@ def probe_http(
     headers: dict[str, str] | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> HealthInfo:
-    """POST an MCP ``initialize`` to the URL and classify the response.
-
-    Recognizes ``401 + WWW-Authenticate: Bearer`` as ``needs_oauth`` so the TUI
-    can surface the OAuth handshake gap for plugin-contributed HTTP MCP servers.
-    """
-    import time
-
+    """POST an MCP ``initialize`` to the URL and classify the response."""
     info = HealthInfo(name=name, server_type="http", health="unknown")
     payload = {
         "jsonrpc": "2.0",
@@ -256,7 +249,7 @@ def probe_http(
         return info
 
 
-# -- Iteration over merged config ---------------------------------------------
+# -- Iteration -----------------------------------------------------------------
 
 
 def probe_server_entry(
@@ -264,7 +257,7 @@ def probe_server_entry(
     entry: dict,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> HealthInfo:
-    """Route one standard mcpServers entry to the appropriate probe."""
+    """Route one mcpServers entry to the appropriate probe."""
     server_type = entry.get("type", "local")
     if server_type == "http":
         return probe_http(
@@ -286,12 +279,11 @@ def probe_all(
     servers: dict[str, dict],
     timeout: float = DEFAULT_TIMEOUT,
 ) -> list[HealthInfo]:
-    """Probe every server in a merged-servers mapping, serially."""
+    """Probe every server serially."""
     return [probe_server_entry(name, entry, timeout=timeout) for name, entry in servers.items()]
 
 
 # -- CLI -----------------------------------------------------------------------
-
 
 _HEALTH_MARKERS: dict[Health, str] = {
     "ok": "✓",
@@ -315,37 +307,36 @@ def _fmt_row(info: HealthInfo) -> str:
 def run_cli() -> int:
     """Entry point for ``copilot-setup doctor``.
 
-    Loads merged config, probes every MCP server, prints a report, returns an
-    exit code (0 = all ok, 1 = at least one unhealthy server).
+    Reads mcp-config.json, probes each server, prints a report.
+    Returns 0 if all ok, 1 if any unhealthy.
     """
-    from copilotsetup.sources import discover_sources, load_source, merge_sources
+    data = read_json(mcp_config_json())
+    servers: dict[str, dict] = {}
+    if isinstance(data, dict):
+        raw = data.get("mcpServers")
+        if isinstance(raw, dict):
+            servers = {k: v for k, v in raw.items() if isinstance(v, dict)}
 
-    sources = [load_source(s) for s in discover_sources()]
-    if not sources:
-        print("No config sources registered (~/.copilot/config-sources.json is empty or missing).")
-        return 0
-    merged = merge_sources(sources)
-
-    if not merged.servers:
+    if not servers:
         print("No MCP servers configured.")
         return 0
 
-    print(f"Probing {len(merged.servers)} MCP server(s)…")
+    print(f"Probing {len(servers)} MCP server(s)…")
     print()
-    print(f"  {'STATUS':<2} {'NAME':<28} {'HEALTH':<14} {'LATENCY':<8} DETAIL")
-    print(f"  {'-' * 2} {'-' * 28} {'-' * 14} {'-' * 8} {'-' * 40}")
+    print(f"  {'':2} {'NAME':<28} {'HEALTH':<14} {'LATENCY':<8} DETAIL")
+    print(f"  {'─' * 2} {'─' * 28} {'─' * 14} {'─' * 8} {'─' * 40}")
 
-    results = probe_all(merged.servers)
+    results = probe_all(servers)
     exit_code = 0
     for info in results:
         print(_fmt_row(info))
         if info.health not in ("ok", "needs_oauth"):
             exit_code = 1
 
-    needs_oauth = [r for r in results if r.health == "needs_oauth"]
-    if needs_oauth:
-        print()
-        print(
-            f"{len(needs_oauth)} server(s) need OAuth. See docs/mcp-oauth-and-plugins.md for the handshake workaround."
-        )
+    print()
+    ok_count = sum(1 for r in results if r.health == "ok")
+    oauth_count = sum(1 for r in results if r.health == "needs_oauth")
+    fail_count = len(results) - ok_count - oauth_count
+    print(f"  {ok_count} ok, {oauth_count} need OAuth, {fail_count} failed")
+
     return exit_code
