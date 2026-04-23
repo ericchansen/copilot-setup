@@ -1,11 +1,17 @@
 [project]
 name = "copilot-setup"
 version = "0.1.0"
-description = "GitHub Copilot CLI configuration engine — discovers, merges, and deploys config from multiple sources"
+description = "A read-only TUI dashboard for GitHub Copilot CLI configuration"
 requires-python = ">=3.10"
 dependencies = [
     "textual>=1.0",
 ]
+
+[project.urls]
+Homepage = "https://ericchansen.github.io/copilot-setup/"
+Documentation = "https://ericchansen.github.io/copilot-setup/"
+Repository = "https://github.com/ericchansen/copilot-setup"
+Issues = "https://github.com/ericchansen/copilot-setup/issues"
 
 [build-system]
 requires = ["setuptools>=68.0"]

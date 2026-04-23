@@ -1,0 +1,89 @@
+/* Terminal-inspired theme for copilot-setup */
+
+:root {
+  --ifm-color-primary: #1a8870;
+  --ifm-color-primary-dark: #167a65;
+  --ifm-color-primary-darker: #14735f;
+  --ifm-color-primary-darkest: #105f4e;
+  --ifm-color-primary-light: #1e967b;
+  --ifm-color-primary-lighter: #209d81;
+  --ifm-color-primary-lightest: #26b192;
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Cascadia Code', 'Fira Code',
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #00ff41;
+  --ifm-color-primary-dark: #00e63b;
+  --ifm-color-primary-darker: #00d938;
+  --ifm-color-primary-darkest: #00b32e;
+  --ifm-color-primary-light: #1aff54;
+  --ifm-color-primary-lighter: #26ff5a;
+  --ifm-color-primary-lightest: #4dff73;
+  --ifm-background-color: #1a1a2e;
+  --ifm-background-surface-color: #16213e;
+  --ifm-navbar-background-color: #0f0f1a;
+  --ifm-footer-background-color: #0a0a14;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 255, 65, 0.1);
+}
+
+/* Monospace headings for terminal feel */
+[data-theme='dark'] h1,
+[data-theme='dark'] h2,
+[data-theme='dark'] h3 {
+  font-family: var(--ifm-font-family-monospace);
+}
+
+/* Terminal-style code blocks */
+[data-theme='dark'] .prism-code {
+  border: 1px solid #00ff4133;
+  border-radius: 6px;
+}
+
+/* Navbar terminal style */
+[data-theme='dark'] .navbar__title {
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* Subtle glow on links in dark mode */
+[data-theme='dark'] a:hover {
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+}
+
+/* Hero section styling */
+.hero-screenshot {
+  max-width: 900px;
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  margin: 2rem auto;
+}
+
+[data-theme='dark'] .hero-screenshot {
+  border: 1px solid #00ff4122;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 255, 65, 0.05);
+}
+
+/* Install snippet on hero */
+.install-snippet {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.1rem;
+  background: #1a1a2e;
+  color: #00ff41;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #00ff4133;
+  display: inline-block;
+  margin: 1rem 0;
+  user-select: all;
+}
+
+[data-theme='light'] .install-snippet {
+  background: #f0f0f0;
+  color: #1a8870;
+  border-color: #1a887033;
+}
