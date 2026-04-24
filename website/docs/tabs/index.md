@@ -32,4 +32,4 @@ Press `/` in any tab to open the **filter bar** and narrow results by keyword.
 - **`/`** — Open the filter bar (works in every tab).
 - **`q`** — Quit the application.
 
-Tabs with write actions (Plugins, MCP Servers, Settings) are covered in detail on their own pages. The remaining read-only tabs are summarized in [Other Tabs](other-tabs.md).
+Tabs with write actions (Plugins, MCP Servers, Settings) are covered in detail on their own pages. The remaining tabs are view-only and are summarized in [Other Tabs](other-tabs.md).

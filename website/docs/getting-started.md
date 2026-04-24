@@ -5,7 +5,7 @@ title: Getting Started
 
 # Getting Started
 
-**copilot-setup** is a read-only terminal dashboard for inspecting your GitHub Copilot CLI configuration. It reads `~/.copilot/` and presents everything in a navigable, filterable TUI — without ever modifying your files.
+**copilot-setup** is a terminal dashboard for viewing and managing your GitHub Copilot CLI configuration. It reads `~/.copilot/` and presents everything in a navigable, filterable TUI. Some tabs support direct actions — toggle, upgrade, and remove plugins or MCP servers without leaving the dashboard.
 
 ## Prerequisites
 
@@ -73,8 +73,15 @@ copilot-setup discovers your configuration from these paths under `~/.copilot/`:
 | `lsp-config.json` | LSP server definitions |
 | `installed-plugins/*/` | Plugin-bundled skills, agents, and other content |
 
-## Read-Only by Design
+## How Actions Work
 
 :::info
-**copilot-setup never writes to any configuration file.** It is a pure viewer. Any actions that modify config — such as toggling a plugin or adding an MCP server — delegate to the `copilot` CLI commands rather than writing files directly.
+**Most tabs are view-only** — they display your config files without modification. Two tabs support actions today:
+
+- **Plugins** — toggle (directly edits `config.json`), remove, and upgrade (delegate to `copilot` CLI)
+- **MCP Servers** — remove (delegates to `copilot` CLI)
+
+The **Settings** tab has a placeholder `e` key binding for editing, but this is not yet implemented.
+
+All CLI-delegated actions run the official `copilot` command as a subprocess. Plugin toggle is the only action that writes to `config.json` directly.
 :::

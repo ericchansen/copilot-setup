@@ -5,7 +5,7 @@ title: Other Tabs
 
 # Other Tabs
 
-These six tabs are read-only viewers with no write actions. Each follows the standard layout — data table on the left, detail pane on the right, `/` to filter.
+These six tabs are view-only — they display configuration without any write actions. Each follows the standard layout — data table on the left, detail pane on the right, `/` to filter.
 
 ## LSP Servers
 
