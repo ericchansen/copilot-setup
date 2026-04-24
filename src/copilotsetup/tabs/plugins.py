@@ -37,7 +37,7 @@ class PluginsTab(BaseTab):
 
         from copilotsetup.plugin_upgrades import check_all
 
-        plugins = [(p.name, p.install_path) for p in items if p.installed]
+        plugins = [(p.name, p.install_path, p.version) for p in items if p.installed]
         if not plugins:
             return
 
