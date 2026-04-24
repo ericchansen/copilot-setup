@@ -129,9 +129,8 @@ def set_plugin_enabled(name: str, enabled: bool) -> bool:
     if not cfg_path.is_file():
         return False
 
-    try:
-        data = json.loads(cfg_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    data = read_json(cfg_path)
+    if not isinstance(data, dict):
         return False
 
     found = False

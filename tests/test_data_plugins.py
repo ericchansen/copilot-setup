@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from copilotsetup.data.plugins import PluginInfo, PluginProvider
+from copilotsetup.data.plugins import PluginInfo, PluginProvider, set_plugin_enabled
 
 
 def test_returns_empty_when_config_missing(tmp_path, monkeypatch):
@@ -205,3 +205,27 @@ def test_null_installed_plugins_list(tmp_path, monkeypatch):
     cfg = {"installedPlugins": None}
     (tmp_path / "config.json").write_text(json.dumps(cfg))
     assert PluginProvider().load() == []
+
+
+def test_parses_plugins_from_jsonc_config(tmp_path, monkeypatch):
+    """Copilot CLI writes // comments at the top of config.json (JSONC)."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    content = "// User settings belong in settings.json.\n// This file is managed automatically.\n" + json.dumps(
+        {"installedPlugins": [{"name": "test-plugin", "version": "1.0"}]}
+    )
+    (tmp_path / "config.json").write_text(content)
+    items = PluginProvider().load()
+    assert len(items) == 1
+    assert items[0].name == "test-plugin"
+
+
+def test_set_plugin_enabled_with_jsonc_config(tmp_path, monkeypatch):
+    """set_plugin_enabled must handle JSONC comments in config.json."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    content = "// comment\n" + json.dumps(
+        {"installedPlugins": [{"name": "p", "marketplace": "copilot", "enabled": True}]}
+    )
+    (tmp_path / "config.json").write_text(content)
+    assert set_plugin_enabled("p", False) is True
+    reloaded = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert reloaded["installedPlugins"][0]["enabled"] is False

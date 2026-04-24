@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 from contextlib import suppress
 from pathlib import Path
@@ -12,11 +13,27 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Matches whole lines that are only a // comment (with optional leading whitespace).
+# Copilot CLI writes JSONC (JSON with Comments) for config.json and may do so
+# for other files in the future.
+_LINE_COMMENT_RE = re.compile(r"^\s*//.*$", re.MULTILINE)
+
+
+def _strip_line_comments(text: str) -> str:
+    """Remove whole-line ``//`` comments so standard ``json.loads`` can parse."""
+    return _LINE_COMMENT_RE.sub("", text)
+
 
 def read_json(path: Path) -> Any:
-    """Read and parse a JSON file. Returns ``None`` if missing or malformed."""
+    """Read and parse a JSON (or JSONC) file.
+
+    Strips whole-line ``//`` comments before parsing so that files written by
+    Copilot CLI (which uses JSONC) are handled transparently.
+    Returns ``None`` if the file is missing or malformed.
+    """
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        return json.loads(_strip_line_comments(text))
     except (OSError, json.JSONDecodeError) as exc:
         logger.debug("read_json(%s) failed: %s", path, exc)
         return None
