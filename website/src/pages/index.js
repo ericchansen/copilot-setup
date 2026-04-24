@@ -17,7 +17,7 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className="hero__subtitle">
-          See everything Copilot CLI has configured — in one place
+          View and manage your Copilot CLI config — all in one place
         </p>
         <img
           src={screenshotUrl}
@@ -44,7 +44,7 @@ export default function Home() {
   return (
     <Layout
       title={siteConfig.title}
-      description="A read-only Textual TUI dashboard for GitHub Copilot CLI configuration">
+      description="A TUI dashboard for viewing and managing GitHub Copilot CLI configuration">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

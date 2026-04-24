@@ -2,9 +2,10 @@
 
 ## Repository Purpose
 
-A **read-only Textual TUI dashboard** for GitHub Copilot CLI. It reads `~/.copilot/`
-configuration from disk and presents it in a navigable, filterable, tabbed interface.
-The app does NOT write any config — it's a pure viewer.
+A **Textual TUI dashboard** for viewing and managing GitHub Copilot CLI configuration.
+It reads `~/.copilot/` configuration from disk and presents it in a navigable,
+filterable, tabbed interface. Some tabs support actions (plugin toggle/remove/upgrade,
+MCP server removal) via CLI delegation or direct config writes.
 
 ## Architecture
 
@@ -32,7 +33,7 @@ All 11 tabs are registered in `app.py`'s `_TAB_DEFINITIONS` list. Each entry is 
 
 ## Key Design Decisions
 
-- **Read-only**: No config writes, no source merging, no junction creation
+- **Minimal writes**: Plugin toggle edits `config.json` directly; remove/upgrade delegate to `copilot` CLI. Most tabs are read-only viewers
 - **Provider protocol**: `ReadProvider` has `load() -> list[T]`; `WriteProvider` adds `save()`
 - **Frozen dataclasses**: All data items are immutable — no in-place mutation
 - **Load generation tokens**: `_load_gen = itertools.count()` prevents stale async results

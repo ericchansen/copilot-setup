@@ -48,6 +48,6 @@ copilot-setup scans each installed plugin's directory for bundled skills and age
 
 Each discovered file is attributed to its parent plugin in the **Source** column. This lets you see at a glance which skills and agents come from which plugin versus your own user-defined files.
 
-## Read-Only
+## View-Only
 
-Both tabs are read-only — they display the YAML files as they exist on disk. To add, edit, or remove skills and agents, modify the YAML files directly in the appropriate directory.
+Both tabs are view-only — they display skill and agent definitions as they exist on disk. Skills are directories containing a `SKILL.md` file, and agents are `.agent.md` markdown files. To add, edit, or remove skills and agents, modify the files directly in the appropriate directory.

@@ -1,7 +1,8 @@
 [project]
 name = "copilot-setup"
 version = "0.1.0"
-description = "A read-only TUI dashboard for GitHub Copilot CLI configuration"
+description = "A TUI dashboard for viewing and managing GitHub Copilot CLI configuration"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "textual>=1.0",

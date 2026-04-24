@@ -4,7 +4,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'copilot-setup',
-  tagline: 'A TUI dashboard for GitHub Copilot CLI configuration',
+  tagline: 'View and manage your GitHub Copilot CLI configuration from the terminal',
   favicon: 'img/favicon.ico',
 
   future: {

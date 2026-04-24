@@ -44,12 +44,12 @@ Complete keyboard reference for copilot-setup.
 
 ## How Actions Work
 
-All mutation actions (install, remove, toggle, upgrade, edit) delegate to the `copilot` CLI. copilot-setup never writes config files directly — it calls `copilot plugin install`, `copilot mcp add`, `copilot config set`, etc. and then refreshes the display.
+Most mutation actions (remove, upgrade) delegate to the `copilot` CLI — copilot-setup calls `copilot plugin uninstall`, `copilot plugin update`, `copilot mcp remove`, etc. and then refreshes the display. The exception is **plugin toggle**, which edits `config.json` directly.
 
 This means:
 
-- Actions require `copilot` CLI to be installed and on PATH
-- Changes are immediately reflected in the TUI after the CLI command completes
+- Most actions require `copilot` CLI to be installed and on PATH
+- Changes are immediately reflected in the TUI after the action completes
 - If a CLI command fails, an error toast appears with the failure details
 
 ## Filter Behavior

@@ -1,8 +1,8 @@
 # copilot-setup
 
-A read-only Textual TUI dashboard for GitHub Copilot CLI. Shows you exactly what's
-configured — MCP servers, plugins, skills, agents, settings, and more — without
-modifying anything.
+A Textual TUI dashboard for viewing and managing your GitHub Copilot CLI configuration.
+Browse MCP servers, plugins, skills, agents, settings, and more — toggle, upgrade,
+and remove plugins or MCP servers without leaving the terminal.
 
 ![copilot-setup dashboard](docs/screenshot.png)
 
