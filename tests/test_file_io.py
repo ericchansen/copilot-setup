@@ -54,3 +54,31 @@ def test_roundtrip(tmp_path):
     data = {"servers": [{"name": "a"}, {"name": "b"}], "count": 2}
     write_json(p, data)
     assert read_json(p) == data
+
+
+# --- JSONC (JSON with Comments) support ---
+
+
+def test_read_json_strips_leading_line_comments(tmp_path):
+    p = tmp_path / "commented.json"
+    p.write_text(
+        '// This is a comment\n// Another comment\n{"key": "value"}\n',
+        encoding="utf-8",
+    )
+    assert read_json(p) == {"key": "value"}
+
+
+def test_read_json_strips_indented_comments(tmp_path):
+    p = tmp_path / "indented.json"
+    p.write_text(
+        '{\n  // inline section comment\n  "a": 1\n}\n',
+        encoding="utf-8",
+    )
+    assert read_json(p) == {"a": 1}
+
+
+def test_read_json_preserves_slashes_in_values(tmp_path):
+    """Ensure // inside JSON string values is not stripped."""
+    p = tmp_path / "url.json"
+    p.write_text('{"url": "https://example.com"}', encoding="utf-8")
+    assert read_json(p) == {"url": "https://example.com"}
