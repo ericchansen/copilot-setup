@@ -219,6 +219,29 @@ def test_parses_plugins_from_jsonc_config(tmp_path, monkeypatch):
     assert items[0].name == "test-plugin"
 
 
+def test_version_from_package_json_preferred(tmp_path, monkeypatch):
+    """When package.json exists, its version takes priority over config.json."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    plugin_dir = tmp_path / "installed-plugins" / "my-plugin"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "package.json").write_text(json.dumps({"version": "2.0.0"}))
+    cfg = {"installedPlugins": [{"name": "my-plugin", "version": "1.0.0", "cache_path": "my-plugin"}]}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].version == "2.0.0"
+
+
+def test_version_falls_back_to_config_without_package_json(tmp_path, monkeypatch):
+    """Without package.json, config.json version is used."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    plugin_dir = tmp_path / "installed-plugins" / "my-plugin"
+    plugin_dir.mkdir(parents=True)
+    cfg = {"installedPlugins": [{"name": "my-plugin", "version": "1.5.0", "cache_path": "my-plugin"}]}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].version == "1.5.0"
+
+
 def test_set_plugin_enabled_with_jsonc_config(tmp_path, monkeypatch):
     """set_plugin_enabled must handle JSONC comments in config.json."""
     monkeypatch.setenv("COPILOT_HOME", str(tmp_path))

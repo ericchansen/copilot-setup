@@ -10,6 +10,21 @@ from copilotsetup.config import config_json, installed_plugins_dir
 from copilotsetup.utils.file_io import read_json
 
 
+def _detect_installed_version(install_path: str) -> str:
+    """Read the version from package.json in the plugin install directory."""
+    if not install_path:
+        return ""
+    pkg = Path(install_path) / "package.json"
+    if not pkg.is_file():
+        return ""
+    try:
+        data = json.loads(pkg.read_text(encoding="utf-8"))
+        v = data.get("version", "") if isinstance(data, dict) else ""
+        return str(v) if v else ""
+    except (json.JSONDecodeError, OSError):
+        return ""
+
+
 @dataclass(frozen=True)
 class PluginInfo:
     """A single Copilot CLI plugin."""
@@ -72,6 +87,11 @@ class PluginProvider:
                 if candidate.is_dir():
                     install_path = str(candidate)
 
+            # Prefer the actual installed version from package.json over
+            # config.json, which can go stale after upgrades.
+            config_version = str(entry.get("version", ""))
+            version = _detect_installed_version(install_path) or config_version
+
             # Scan for bundled content
             bundled_skills: list[str] = []
             bundled_servers: list[str] = []
@@ -106,7 +126,7 @@ class PluginProvider:
                 PluginInfo(
                     name=str(name),
                     source=marketplace or "local",
-                    version=str(entry.get("version", "")),
+                    version=version,
                     installed=True,
                     disabled=not enabled,
                     install_path=install_path,
