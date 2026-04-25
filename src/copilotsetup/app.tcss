@@ -1,0 +1,68 @@
+/* copilot-setup main stylesheet */
+
+Screen {
+    layout: vertical;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+/* Split pane inside each tab */
+#split-pane {
+    height: 1fr;
+    width: 100%;
+}
+
+#table-container {
+    width: 60%;
+    height: 1fr;
+}
+
+#tab-table {
+    height: 1fr;
+    scrollbar-size-vertical: 0;
+}
+
+#detail-pane {
+    width: 40%;
+    height: 1fr;
+    scrollbar-size-vertical: 0;
+}
+
+/* Empty state */
+#empty-state {
+    width: 100%;
+    height: auto;
+    text-align: center;
+    padding: 2 0;
+    color: $text-muted;
+}
+
+/* Help overlay */
+HelpOverlay > Vertical {
+    width: 60;
+    max-height: 80%;
+    background: $surface;
+    border: thick $accent;
+    padding: 1 2;
+}
+
+/* Confirmation dialog */
+ConfirmScreen > Vertical {
+    width: 50;
+    height: auto;
+    max-height: 12;
+    background: $surface;
+    border: thick $warning;
+    padding: 1 2;
+}
+
+/* Input form */
+InputScreen > Vertical {
+    width: 60;
+    max-height: 80%;
+    background: $surface;
+    border: thick $accent;
+    padding: 1 2;
+}
