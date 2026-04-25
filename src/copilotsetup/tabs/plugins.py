@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 
 from copilotsetup.data.plugins import PluginInfo, PluginProvider, set_plugin_enabled
 from copilotsetup.tabs.base import BaseTab
 from copilotsetup.utils.cli import run_copilot
 from copilotsetup.widgets.status_render import Status, reason_cell, status_cell
+
+logger = logging.getLogger(__name__)
 
 
 class PluginsTab(BaseTab):
@@ -46,9 +49,10 @@ class PluginsTab(BaseTab):
                 results = check_all(plugins)
                 upgrade_map = {r.name: r for r in results if r.upgrade_available}
                 if upgrade_map:
-                    self.call_from_thread(self._apply_upgrades, upgrade_map)
+                    # call_from_thread is an App method, not a Widget method
+                    self.app.call_from_thread(self._apply_upgrades, upgrade_map)
             except Exception:
-                pass
+                logger.debug("Upgrade check failed", exc_info=True)
 
         threading.Thread(target=_run, daemon=True).start()
 
