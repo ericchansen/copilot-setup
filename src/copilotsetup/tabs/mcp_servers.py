@@ -27,6 +27,7 @@ class McpServersTab(BaseTab):
         self._provider = McpServerProvider()
 
     def load_items(self) -> list[McpServerInfo]:
+        self._profile_matrix = None  # type: ignore[assignment]
         return self._provider.load()
 
     def key_for(self, item: McpServerInfo) -> str:
@@ -63,6 +64,17 @@ class McpServersTab(BaseTab):
             parts.append(f"[bold]Health:[/] {item.health}")
         if item.health_latency:
             parts.append(f"[bold]Latency:[/] {item.health_latency}")
+
+        # Show which profiles include this server
+        if getattr(self, "_profile_matrix", None) is None:
+            from copilotsetup.data.profiles import profile_server_matrix
+
+            self._profile_matrix = profile_server_matrix()
+        profile_names = self._profile_matrix.get(item.name)
+        if profile_names:
+            names = ", ".join(sorted(profile_names))
+            parts.append(f"\n[bold]Profiles:[/] {names}")
+
         return "\n".join(parts)
 
     def handle_add(self) -> None:

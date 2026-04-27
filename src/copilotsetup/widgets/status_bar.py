@@ -25,6 +25,7 @@ class StatusBar(Static):
         self._counts: dict[str, int] = {}
         self._health: str = ""
         self._progress: str = ""
+        self._profile: str = ""
 
     def on_mount(self) -> None:
         self._refresh()
@@ -45,8 +46,15 @@ class StatusBar(Static):
         self._progress = ""
         self._refresh()
 
+    def set_profile(self, name: str) -> None:
+        self._profile = name
+        self._refresh()
+
     def _refresh(self) -> None:
-        parts: list[str] = [f"{APP_NAME} v{APP_VERSION}"]
+        parts: list[str] = []
+        if self._profile:
+            parts.append(f"[bold]\\[{self._profile}][/bold]")
+        parts.append(f"{APP_NAME} v{APP_VERSION}")
         if self._counts:
             count_parts = [f"{v} {k}" for k, v in self._counts.items() if v]
             if count_parts:

@@ -6,6 +6,7 @@ Adding a new tab requires only a tab class + an entry in ``_TAB_DEFINITIONS``.
 
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import suppress
 from typing import ClassVar
@@ -55,6 +56,10 @@ class CopilotSetupApp(App[None]):
     TITLE = f"{APP_NAME} v{APP_VERSION}"
     CSS_PATH = "app.tcss"
 
+    # Original COPILOT_HOME before any profile browsing
+    _original_copilot_home: str | None = None
+    _browsing_profile: str = ""
+
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("left", "prev_tab", "Prev Tab", show=False, priority=True),
         Binding("right", "next_tab", "Next Tab", show=False, priority=True),
@@ -92,6 +97,13 @@ class CopilotSetupApp(App[None]):
 
         for tabs in self.query(Tabs):
             tabs.can_focus = False
+
+        from copilotsetup.data.profiles import detect_active_profile
+
+        profile = detect_active_profile()
+        if profile:
+            with suppress(Exception):
+                self.query_one("#status-bar", StatusBar).set_profile(profile)
 
     # --- tab events -----------------------------------------------------------
 
@@ -154,6 +166,56 @@ class CopilotSetupApp(App[None]):
         tab = self._active_tab()
         if tab is not None:
             tab.dispatch_action(key)
+
+    # --- profile browsing -----------------------------------------------------
+
+    def browse_profile(self, profile_path: str, profile_name: str) -> None:
+        """Switch all tabs to view a different profile's config.
+
+        Sets ``COPILOT_HOME`` so all data providers and CLI commands target
+        the profile directory. Call ``restore_default_profile()`` to revert.
+        """
+        if self._original_copilot_home is None:
+            self._original_copilot_home = os.environ.get("COPILOT_HOME", "")
+        os.environ["COPILOT_HOME"] = profile_path
+        self._browsing_profile = profile_name
+        with suppress(Exception):
+            self.query_one("#status-bar", StatusBar).set_profile(f"browsing: {profile_name}")
+        self._refresh_all_tabs()
+        self.notify(
+            f"Browsing profile: {profile_name}\nLaunch CLI: COPILOT_HOME={profile_path} copilot",
+            title="Profiles",
+        )
+        # Copy launch command to clipboard
+        launch_cmd = f'$env:COPILOT_HOME="{profile_path}"; copilot'
+        self.copy_to_clipboard(launch_cmd)
+
+    def restore_default_profile(self) -> None:
+        """Restore the original COPILOT_HOME and refresh all tabs."""
+        if self._original_copilot_home is None:
+            return
+        if self._original_copilot_home:
+            os.environ["COPILOT_HOME"] = self._original_copilot_home
+        else:
+            os.environ.pop("COPILOT_HOME", None)
+        self._browsing_profile = ""
+        self._original_copilot_home = None
+
+        # Restore status bar to show actual active profile (if any)
+        from copilotsetup.data.profiles import detect_active_profile
+
+        profile = detect_active_profile()
+        with suppress(Exception):
+            self.query_one("#status-bar", StatusBar).set_profile(profile)
+        self._refresh_all_tabs()
+        self.notify("Returned to default config", title="Profiles")
+
+    def _refresh_all_tabs(self) -> None:
+        """Refresh every tab's data after a profile switch."""
+        for _label, pane_id, _cls in _TAB_DEFINITIONS:
+            with suppress(Exception):
+                tab = self.query_one(f"#content-{pane_id}", BaseTab)
+                tab.refresh_data()
 
     # --- helpers --------------------------------------------------------------
 

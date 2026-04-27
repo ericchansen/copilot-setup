@@ -37,6 +37,12 @@ _HELP_CONTENT = """\
 
 [bold underline]Settings tab[/bold underline]
   e             Edit setting
+
+[bold underline]Profiles tab[/bold underline]
+  a             Create profile (clone from root)
+  e             Rename profile
+  x             Delete profile
+  t             Browse profile (view/edit its config across all tabs)
 """
 
 
