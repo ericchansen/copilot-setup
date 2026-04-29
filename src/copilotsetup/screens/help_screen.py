@@ -38,6 +38,12 @@ _HELP_CONTENT = """\
 [bold underline]Settings tab[/bold underline]
   e             Edit setting
 
+[bold underline]Marketplaces tab[/bold underline]
+  a             Add marketplace
+  x             Remove marketplace
+  u             Update marketplace catalog(s)
+  m             Browse selected marketplace
+
 [bold underline]Profiles tab[/bold underline]
   a             Create profile (clone from root)
   e             Rename profile
