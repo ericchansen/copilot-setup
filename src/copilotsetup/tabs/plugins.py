@@ -183,6 +183,16 @@ class PluginsTab(BaseTab):
 
     def handle_marketplace(self) -> None:
         try:
+            refresh_result = run_copilot("plugin", "marketplace", "update", timeout=30)
+            if refresh_result.returncode != 0:
+                logger.debug(
+                    "Marketplace refresh failed: %s",
+                    refresh_result.stderr.strip() or refresh_result.stdout.strip() or "Unknown error",
+                )
+        except Exception:
+            logger.debug("Marketplace refresh failed", exc_info=True)
+
+        try:
             result = run_copilot("plugin", "marketplace", "list", timeout=30)
         except FileNotFoundError:
             self.notify("copilot CLI not found", severity="error", title="Marketplace")
