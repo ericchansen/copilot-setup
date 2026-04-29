@@ -10,7 +10,19 @@ import os
 from pathlib import Path
 
 APP_NAME = "copilot-setup"
-APP_VERSION = "0.1.0"
+APP_VERSION: str
+
+
+def _get_version() -> str:
+    from importlib.metadata import version
+
+    return version("copilot-setup")
+
+
+try:
+    APP_VERSION = _get_version()
+except Exception:
+    APP_VERSION = "0.1.0"
 
 # Environment variable prefixes relevant to Copilot CLI configuration.
 ENV_PREFIXES = (
