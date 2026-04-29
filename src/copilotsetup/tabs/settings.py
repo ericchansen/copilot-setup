@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, ClassVar
 
 from copilotsetup.config import config_json
 from copilotsetup.data.settings import SettingInfo, SettingsProvider
 from copilotsetup.tabs.base import BaseTab
-from copilotsetup.utils.file_io import read_json
+from copilotsetup.utils.file_io import read_json, write_json
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ class SettingsTab(BaseTab):
         target[parts[-1]] = value
 
         try:
-            path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            write_json(path, cfg)
             return True
         except Exception:
             logger.exception("Failed to write %s", path)
