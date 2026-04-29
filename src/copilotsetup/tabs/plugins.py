@@ -182,7 +182,101 @@ class PluginsTab(BaseTab):
             self.notify(f"Error: {exc}", severity="error", title="Upgrade")
 
     def handle_marketplace(self) -> None:
-        self.notify(
-            "Use `copilot plugin marketplace browse` to discover plugins",
-            title="Marketplace",
-        )
+        try:
+            result = run_copilot("plugin", "marketplace", "list", timeout=30)
+        except FileNotFoundError:
+            self.notify("copilot CLI not found", severity="error", title="Marketplace")
+            return
+        except Exception as exc:
+            self.notify(f"Error: {exc}", severity="error", title="Marketplace")
+            return
+
+        # Parse marketplace names from output lines like "  • name (..." or "  ◆ name (..."
+        import re
+
+        names: list[str] = []
+        for line in result.stdout.splitlines():
+            m = re.match(r"\s*[•◆]\s+(\S+)", line)
+            if m:
+                names.append(m.group(1))
+
+        if not names:
+            self.notify("No marketplaces found", severity="warning", title="Marketplace")
+            return
+
+        # Browse the first marketplace, or let user pick if multiple
+        def _browse(name: str) -> None:
+            try:
+                browse_result = run_copilot("plugin", "marketplace", "browse", name, timeout=30)
+            except Exception as exc:
+                self.notify(f"Error: {exc}", severity="error", title="Marketplace")
+                return
+            if browse_result.returncode != 0:
+                msg = browse_result.stderr.strip() or browse_result.stdout.strip() or "Unknown error"
+                self.notify(f"Failed: {msg[:200]}", severity="error", title="Marketplace")
+                return
+
+            # Parse plugin names from "  • plugin-name - description"
+            plugins: list[str] = []
+            for line in browse_result.stdout.splitlines():
+                m = re.match(r"\s*[•]\s+(\S+)", line)
+                if m:
+                    plugins.append(m.group(1))
+
+            if not plugins:
+                self.notify(f"No plugins in {name}", severity="warning", title="Marketplace")
+                return
+
+            from copilotsetup.screens.input_dialog import InputDialog
+
+            available = ", ".join(plugins)
+
+            def on_pick(choice: str | None) -> None:
+                if choice is None:
+                    return
+                choice = choice.strip()
+                source = f"{choice}@{name}" if "@" not in choice else choice
+                try:
+                    install_result = run_copilot("plugin", "install", source, timeout=120)
+                    if install_result.returncode == 0:
+                        self.notify(f"Installed {source}", title="Marketplace")
+                        self.refresh_data()
+                    else:
+                        msg = install_result.stderr.strip() or install_result.stdout.strip() or "Unknown error"
+                        self.notify(f"Failed: {msg[:200]}", severity="error", title="Marketplace")
+                except FileNotFoundError:
+                    self.notify("copilot CLI not found", severity="error", title="Marketplace")
+                except Exception as exc:
+                    self.notify(f"Error: {exc}", severity="error", title="Marketplace")
+
+            self.app.push_screen(
+                InputDialog(
+                    prompt=f"Available: {available}\nInstall which plugin?",
+                    placeholder=f"e.g. {plugins[0]}",
+                ),
+                on_pick,
+            )
+
+        if len(names) == 1:
+            _browse(names[0])
+        else:
+            from copilotsetup.screens.input_dialog import InputDialog
+
+            available = ", ".join(names)
+
+            def on_marketplace(choice: str | None) -> None:
+                if choice is None:
+                    return
+                choice = choice.strip()
+                if choice in names:
+                    _browse(choice)
+                else:
+                    self.notify(f"Unknown marketplace: {choice}", severity="warning", title="Marketplace")
+
+            self.app.push_screen(
+                InputDialog(
+                    prompt=f"Which marketplace? ({available})",
+                    placeholder=f"e.g. {names[0]}",
+                ),
+                on_marketplace,
+            )

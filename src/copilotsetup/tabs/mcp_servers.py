@@ -78,9 +78,44 @@ class McpServersTab(BaseTab):
         return "\n".join(parts)
 
     def handle_add(self) -> None:
-        self.notify(
-            "Use [bold]copilot mcp add[/] to add servers",
-            title="MCP Servers",
+        from copilotsetup.screens.input_dialog import InputDialog
+
+        def on_name(name: str | None) -> None:
+            if name is None:
+                return
+
+            def on_target(target: str | None) -> None:
+                if target is None:
+                    return
+                try:
+                    target = target.strip()
+                    if target.startswith(("http://", "https://")):
+                        result = run_copilot("mcp", "add", "--transport", "http", name, target, timeout=60)
+                    else:
+                        parts = target.split()
+                        result = run_copilot("mcp", "add", name, "--", *parts, timeout=60)
+                    if result.returncode == 0:
+                        self.notify(f"Added [bold]{name}[/]", title="MCP Servers")
+                        self.refresh_data()
+                    else:
+                        msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                        self.notify(f"Failed: {msg[:200]}", severity="error", title="MCP Servers")
+                except FileNotFoundError:
+                    self.notify("copilot CLI not found", severity="error", title="MCP Servers")
+                except Exception as exc:
+                    self.notify(f"Error: {exc}", severity="error", title="MCP Servers")
+
+            self.app.push_screen(
+                InputDialog(
+                    prompt="URL or command (e.g. https://mcp.example.com or npx -y @pkg/server):",
+                    placeholder="https://... for HTTP, or command args for stdio",
+                ),
+                on_target,
+            )
+
+        self.app.push_screen(
+            InputDialog(prompt="Server name:", placeholder="e.g. my-server"),
+            on_name,
         )
 
     def handle_remove(self) -> None:
@@ -114,8 +149,28 @@ class McpServersTab(BaseTab):
             )
 
     def handle_health(self) -> None:
-        self.notify(
-            "Health probing not yet available — doctor not ported",
-            severity="warning",
-            title="MCP Servers",
-        )
+        item = self.get_selected_item()
+        if item is None:
+            self.notify("No server selected", severity="warning", title="Health")
+            return
+
+        from copilotsetup.doctor import probe_http, probe_stdio
+
+        if item.server_type == "http" and item.url:
+            result = probe_http(item.name, item.url)
+        elif item.command:
+            result = probe_stdio(item.name, item.command, list(item.args))
+        else:
+            self.notify("Cannot probe — no command or URL", severity="warning", title="Health")
+            return
+
+        latency = f" ({result.latency_ms}ms)" if result.latency_ms else ""
+        detail = f": {result.detail}" if result.detail else ""
+        if result.health == "ok":
+            self.notify(f"[bold]{item.name}[/] — ✓ ok{latency}{detail}", title="Health")
+        else:
+            self.notify(
+                f"[bold]{item.name}[/] — {result.health}{latency}{detail}",
+                severity="error",
+                title="Health",
+            )
