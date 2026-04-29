@@ -22,6 +22,7 @@ from copilotsetup.tabs.environment import EnvironmentTab
 from copilotsetup.tabs.extensions import ExtensionsTab
 from copilotsetup.tabs.hooks import HooksTab
 from copilotsetup.tabs.lsp_servers import LspServersTab
+from copilotsetup.tabs.marketplaces import MarketplacesTab
 from copilotsetup.tabs.mcp_servers import McpServersTab
 from copilotsetup.tabs.permissions import PermissionsTab
 from copilotsetup.tabs.plugins import PluginsTab
@@ -47,6 +48,7 @@ _TAB_DEFINITIONS: list[tuple[str, str, type[BaseTab]]] = [
     ("Profiles", "tab-profiles", ProfilesTab),
     ("Environment", "tab-environment", EnvironmentTab),
     ("Settings", "tab-settings", SettingsTab),
+    ("Marketplaces", "tab-marketplaces", MarketplacesTab),
 ]
 
 
