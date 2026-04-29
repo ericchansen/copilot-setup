@@ -62,6 +62,12 @@ class ProfilesTab(BaseTab):
         parts.append(f"[bold]Sessions:[/] {item.session_count}")
         parts.append("")
 
+        if not item.is_default:
+            parts.append("[bold]Launch with this profile:[/]")
+            parts.append(f"  [dim]pwsh>[/]  $env:COPILOT_HOME='{item.path}'; copilot")
+            parts.append(f"  [dim]sh  >[/]  COPILOT_HOME='{item.path}' copilot")
+            parts.append("")
+
         if item.mcp_servers:
             parts.append(f"[bold]MCP Servers ({len(item.mcp_servers)}):[/]")
             parts.extend(f"  {s}" for s in item.mcp_servers)
