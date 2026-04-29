@@ -22,6 +22,9 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 include = ["copilotsetup*"]
 
+[tool.setuptools.package-data]
+copilotsetup = ["*.tcss"]
+
 [project.scripts]
 copilot-setup = "copilotsetup.app:main"
 
