@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from copilotsetup.config import config_json, installed_plugins_dir, mcp_config_json
 from copilotsetup.utils.file_io import read_json
@@ -24,6 +24,7 @@ class McpServerInfo:
     missing_env: tuple[str, ...] = ()
     health: str = ""
     health_latency: str = ""
+    raw_entry: dict[str, object] = field(default_factory=dict)
 
     @property
     def status(self) -> str:
@@ -132,6 +133,7 @@ def _load_plugin_only_servers(plugin_map: dict[str, str], already_seen: set[str]
                         source=str(plugin_name),
                         env_ok=env_ok,
                         missing_env=missing,
+                        raw_entry=dict(srv_entry),
                     )
                 )
         except (json.JSONDecodeError, OSError):
@@ -175,6 +177,7 @@ class McpServerProvider:
                     source=source,
                     env_ok=env_ok,
                     missing_env=missing,
+                    raw_entry=dict(entry),
                 )
             )
 

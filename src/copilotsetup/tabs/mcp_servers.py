@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shlex
 from typing import Any, ClassVar
 
 from copilotsetup.data.mcp_servers import McpServerInfo, McpServerProvider
@@ -92,7 +94,7 @@ class McpServersTab(BaseTab):
                     if target.startswith(("http://", "https://")):
                         result = run_copilot("mcp", "add", "--transport", "http", name, target, timeout=60)
                     else:
-                        parts = target.split()
+                        parts = shlex.split(target, posix=(os.name != "nt"))
                         result = run_copilot("mcp", "add", name, "--", *parts, timeout=60)
                     if result.returncode == 0:
                         self.notify(f"Added [bold]{name}[/]", title="MCP Servers")
@@ -153,24 +155,30 @@ class McpServersTab(BaseTab):
         if item is None:
             self.notify("No server selected", severity="warning", title="Health")
             return
-
-        from copilotsetup.doctor import probe_http, probe_stdio
-
-        if item.server_type == "http" and item.url:
-            result = probe_http(item.name, item.url)
-        elif item.command:
-            result = probe_stdio(item.name, item.command, list(item.args))
-        else:
-            self.notify("Cannot probe — no command or URL", severity="warning", title="Health")
+        if not item.raw_entry:
+            self.notify("No config entry available for probing", severity="warning", title="Health")
             return
 
-        latency = f" ({result.latency_ms}ms)" if result.latency_ms else ""
-        detail = f": {result.detail}" if result.detail else ""
-        if result.health == "ok":
-            self.notify(f"[bold]{item.name}[/] — ✓ ok{latency}{detail}", title="Health")
-        else:
-            self.notify(
-                f"[bold]{item.name}[/] — {result.health}{latency}{detail}",
-                severity="error",
-                title="Health",
-            )
+        import threading
+
+        from copilotsetup.doctor import probe_server_entry
+
+        self.notify(f"Probing {item.name}…", title="Health")
+
+        def _probe() -> None:
+            result = probe_server_entry(item.name, dict(item.raw_entry))
+            latency = f" ({result.latency_ms}ms)" if result.latency_ms else ""
+            detail = f": {result.detail}" if result.detail else ""
+            if result.health == "ok":
+                msg = f"[bold]{item.name}[/] — ✓ ok{latency}{detail}"
+                self.app.call_from_thread(self.notify, msg, title="Health")
+            else:
+                msg = f"[bold]{item.name}[/] — {result.health}{latency}{detail}"
+                self.app.call_from_thread(
+                    self.notify,
+                    msg,
+                    severity="error",
+                    title="Health",
+                )
+
+        threading.Thread(target=_probe, daemon=True).start()
