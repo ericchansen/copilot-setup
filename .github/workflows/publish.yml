@@ -95,7 +95,7 @@ jobs:
         run: |
           pip install dist/*.whl
           python -c "import copilotsetup; print(f'✓ copilotsetup {copilotsetup.__version__}')"
-          copilot-setup --help || true
+          python -c "from copilotsetup.app import CopilotSetupApp; print('✓ entry point importable')"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -118,6 +118,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
 
   pypi:
     needs: test-pypi
