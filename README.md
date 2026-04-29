@@ -12,6 +12,12 @@ and remove plugins or MCP servers without leaving the terminal.
 pip install copilot-setup
 ```
 
+Or run directly without installing:
+
+```bash
+uvx --from git+https://github.com/ericchansen/copilot-setup copilot-setup
+```
+
 Requires Python ≥ 3.10.
 
 ## Usage

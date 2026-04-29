@@ -20,6 +20,12 @@ Install from PyPI:
 pip install copilot-setup
 ```
 
+Or run directly without installing (requires [uv](https://docs.astral.sh/uv/)):
+
+```bash
+uvx --from git+https://github.com/ericchansen/copilot-setup copilot-setup
+```
+
 Or install from source for development:
 
 ```bash
