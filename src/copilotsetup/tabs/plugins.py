@@ -114,9 +114,30 @@ class PluginsTab(BaseTab):
     # --- action handlers ------------------------------------------------------
 
     def handle_add(self) -> None:
-        self.notify(
-            "Use `copilot plugin install <source>` to install",
-            title="Install Plugin",
+        from copilotsetup.screens.input_dialog import InputDialog
+
+        def on_result(source: str | None) -> None:
+            if source is None:
+                return
+            try:
+                result = run_copilot("plugin", "install", source, timeout=120)
+                if result.returncode == 0:
+                    self.notify(f"Installed {source}", title="Install Plugin")
+                    self.refresh_data()
+                else:
+                    msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                    self.notify(f"Failed: {msg[:200]}", severity="error", title="Install Plugin")
+            except FileNotFoundError:
+                self.notify("copilot CLI not found", severity="error", title="Install Plugin")
+            except Exception as exc:
+                self.notify(f"Error: {exc}", severity="error", title="Install Plugin")
+
+        self.app.push_screen(
+            InputDialog(
+                prompt="Plugin source (owner/repo, plugin@marketplace, or URL):",
+                placeholder="e.g. owner/repo, spark@copilot-plugins",
+            ),
+            on_result,
         )
 
     def handle_remove(self) -> None:
