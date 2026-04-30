@@ -91,7 +91,7 @@ class ProfilesTab(BaseTab):
         return "\n".join(parts)
 
     def filter_text(self, item: ProfileInfo) -> str:
-        return f"{item.name} {' '.join(item.mcp_servers)} {' '.join(item.plugins)}"
+        return f"{item.name} {item.model} {' '.join(item.mcp_servers)} {' '.join(item.plugins)} {' '.join(item.lsp_servers)}"
 
     def handle_add(self) -> None:
         from copilotsetup.screens.input_dialog import InputDialog

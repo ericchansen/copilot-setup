@@ -77,7 +77,6 @@ class CopilotSetupApp(App[None]):
         Binding("u", "tab_action('u')", "Upgrade", show=False),
         Binding("m", "tab_action('m')", "Marketplace", show=False),
         Binding("h", "tab_action('h')", "Health", show=False),
-        Binding("s", "tab_action('s')", "Save", show=False),
     ]
 
     def compose(self) -> ComposeResult:
