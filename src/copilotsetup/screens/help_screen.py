@@ -33,7 +33,7 @@ _HELP_CONTENT = """\
   x             Uninstall plugin
   t             Enable / Disable
   u             Upgrade plugin
-  m             Browse marketplace
+  m             Go to Marketplaces tab
 
 [bold underline]Settings tab[/bold underline]
   e             Edit setting
