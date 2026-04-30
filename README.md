@@ -15,7 +15,7 @@ pip install copilot-setup
 Or run directly without installing:
 
 ```bash
-uvx --from git+https://github.com/ericchansen/copilot-setup copilot-setup
+uvx copilot-setup
 ```
 
 Requires Python ≥ 3.10.
