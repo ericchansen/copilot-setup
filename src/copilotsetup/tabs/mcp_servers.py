@@ -95,6 +95,8 @@ class McpServersTab(BaseTab):
                         result = run_copilot("mcp", "add", "--transport", "http", name, target, timeout=60)
                     else:
                         parts = shlex.split(target, posix=(os.name != "nt"))
+                        if os.name == "nt":
+                            parts = [p.strip('"').strip("'") for p in parts]
                         result = run_copilot("mcp", "add", name, "--", *parts, timeout=60)
                     if result.returncode == 0:
                         self.notify(f"Added [bold]{name}[/]", title="MCP Servers")

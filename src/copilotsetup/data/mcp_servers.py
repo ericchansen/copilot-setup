@@ -24,7 +24,7 @@ class McpServerInfo:
     missing_env: tuple[str, ...] = ()
     health: str = ""
     health_latency: str = ""
-    raw_entry: dict[str, object] = field(default_factory=dict)
+    raw_entry: dict[str, object] = field(default_factory=dict, hash=False, compare=False)
 
     @property
     def status(self) -> str:
