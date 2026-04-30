@@ -273,3 +273,42 @@ def test_source_defaults_to_config(tmp_path, monkeypatch):
     items = McpServerProvider().load()
     assert len(items) == 1
     assert items[0].source == "config"
+
+
+def test_raw_entry_populated_for_config_server(tmp_path, monkeypatch):
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    entry = {
+        "command": "node",
+        "args": ["server.js", "--port", "3000"],
+        "env": {"API_KEY": "value"},
+    }
+    _write_config(tmp_path, {"mcpServers": {"config-srv": entry}})
+
+    items = McpServerProvider().load()
+
+    assert len(items) == 1
+    assert items[0].raw_entry == entry
+    assert items[0].raw_entry["command"] == "node"
+    assert items[0].raw_entry["args"] == ["server.js", "--port", "3000"]
+    assert items[0].raw_entry["env"] == {"API_KEY": "value"}
+
+
+def test_raw_entry_populated_for_http_server(tmp_path, monkeypatch):
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    entry = {
+        "type": "http",
+        "url": "https://example.com/mcp",
+        "headers": {"Authorization": "Bearer abc"},
+    }
+    _write_config(tmp_path, {"mcpServers": {"remote-api": entry}})
+
+    items = McpServerProvider().load()
+
+    assert len(items) == 1
+    assert items[0].raw_entry == entry
+    assert items[0].raw_entry["type"] == "http"
+    assert items[0].raw_entry["url"] == "https://example.com/mcp"
+
+
+def test_raw_entry_default_empty():
+    assert McpServerInfo(name="x").raw_entry == {}
