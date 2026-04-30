@@ -168,17 +168,25 @@ class McpServersTab(BaseTab):
         self.notify(f"Probing {item.name}…", title="Health")
 
         def _probe() -> None:
-            result = probe_server_entry(item.name, dict(item.raw_entry))
-            latency = f" ({result.latency_ms}ms)" if result.latency_ms else ""
-            detail = f": {result.detail}" if result.detail else ""
-            if result.health == "ok":
-                msg = f"[bold]{item.name}[/] — ✓ ok{latency}{detail}"
-                self.app.call_from_thread(self.notify, msg, title="Health")
-            else:
-                msg = f"[bold]{item.name}[/] — {result.health}{latency}{detail}"
+            try:
+                result = probe_server_entry(item.name, dict(item.raw_entry))
+                latency = f" ({result.latency_ms}ms)" if result.latency_ms else ""
+                detail = f": {result.detail}" if result.detail else ""
+                if result.health == "ok":
+                    msg = f"[bold]{item.name}[/] — ✓ ok{latency}{detail}"
+                    self.app.call_from_thread(self.notify, msg, title="Health")
+                else:
+                    msg = f"[bold]{item.name}[/] — {result.health}{latency}{detail}"
+                    self.app.call_from_thread(
+                        self.notify,
+                        msg,
+                        severity="error",
+                        title="Health",
+                    )
+            except Exception as exc:
                 self.app.call_from_thread(
                     self.notify,
-                    msg,
+                    f"Probe failed for [bold]{item.name}[/]: {exc}",
                     severity="error",
                     title="Health",
                 )

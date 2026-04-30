@@ -25,6 +25,8 @@ def test_run_copilot_calls_subprocess() -> None:
         ["copilot", "version"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30.0,
     )
     assert result.returncode == 0
@@ -41,6 +43,8 @@ def test_run_copilot_multiple_args() -> None:
         ["copilot", "mcp", "list", "--json"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30.0,
     )
 
@@ -64,5 +68,7 @@ def test_run_copilot_custom_timeout() -> None:
         ["copilot", "version"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60.0,
     )

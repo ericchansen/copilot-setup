@@ -75,7 +75,12 @@ class SettingsTab(BaseTab):
         path = config_json()
         cfg = read_json(path)
         if not isinstance(cfg, dict):
-            cfg = {}
+            self.notify(
+                "Cannot update — config.json is invalid or unreadable",
+                severity="error",
+                title="Settings",
+            )
+            return False
 
         # Handle dotted keys like "chat.agent" → cfg["chat"]["agent"]
         parts = key.split(".")
@@ -139,7 +144,16 @@ class SettingsTab(BaseTab):
             )
             return
 
-        # String/other — free text input
+        # Unsupported types (list, dict) — warn instead of clobbering
+        if item.value_type == "list":
+            self.notify(
+                f"Cannot edit list setting '{item.key}' from TUI — edit config.json directly",
+                severity="warning",
+                title="Settings",
+            )
+            return
+
+        # String — free text input
         from copilotsetup.screens.input_dialog import InputDialog
 
         def on_text(val: str | None) -> None:
