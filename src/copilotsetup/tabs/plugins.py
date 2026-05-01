@@ -44,11 +44,13 @@ class PluginsTab(BaseTab):
         if not plugins:
             return
 
-        cache = UpgradeCache()
+        cache = UpgradeCache.get_instance()
+        force = getattr(self, "_force_refresh", False)
+        self._force_refresh = False
 
         def _run() -> None:
             try:
-                results = [cache.get_or_check(name, path, version) for name, path, version in plugins]
+                results = [cache.get_or_check(name, path, version, force=force) for name, path, version in plugins]
                 result_map = {r.name: r for r in results}
                 # call_from_thread is an App method, not a Widget method
                 self.app.call_from_thread(self._apply_upgrades, result_map)
@@ -56,6 +58,11 @@ class PluginsTab(BaseTab):
                 logger.debug("Upgrade check failed", exc_info=True)
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def refresh_data(self) -> None:
+        """Override to force bypass cache on manual refresh (``r`` key)."""
+        self._force_refresh = True
+        super().refresh_data()
 
     def _apply_upgrades(self, result_map: dict) -> None:
         """Merge upgrade results into current items and refresh the table."""
@@ -196,7 +203,7 @@ class PluginsTab(BaseTab):
             if result.returncode == 0:
                 from copilotsetup.upgrade_cache import UpgradeCache
 
-                UpgradeCache().invalidate(item.name)
+                UpgradeCache.get_instance().invalidate(item.name)
                 self.notify(f"Upgraded {item.name}", title="Upgrade Plugin")
                 self.refresh_data()
             else:

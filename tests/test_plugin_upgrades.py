@@ -355,6 +355,7 @@ def test_check_plugin_cached_latest_up_to_date(tmp_path):
 
     result = check_plugin(str(tmp_path), "test", _cached_latest="v1.0.0")
     assert result.status == "up-to-date"
+    assert result.network_verified is True
 
 
 # --- Test for fetch failure fallback to local tags ---
@@ -386,3 +387,20 @@ def test_check_plugin_fetch_fails_uses_local_tags(tmp_path):
         result = check_plugin(str(tmp_path), "test")
         assert result.status == "upgradable"
         assert result.latest_version == "v2.0.0"
+        assert result.network_verified is False
+
+
+def test_git_env_memoized():
+    """_get_or_build_git_env should return same dict on second call."""
+    import copilotsetup.plugin_upgrades as mod
+
+    mod._cached_git_env = None
+    try:
+        with patch.object(mod, "_git_env", return_value={"GIT_TERMINAL_PROMPT": "0"}) as mock_git_env:
+            env1 = mod._get_or_build_git_env()
+            env2 = mod._get_or_build_git_env()
+
+        assert env1 is env2
+        assert mock_git_env.call_count == 1
+    finally:
+        mod._cached_git_env = None

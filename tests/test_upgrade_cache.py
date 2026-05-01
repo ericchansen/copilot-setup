@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
+from copilotsetup.plugin_upgrades import PluginUpgradeInfo
 from copilotsetup.upgrade_cache import _SCHEMA_VERSION, _TTL, UpgradeCache
 
 
@@ -118,3 +120,59 @@ def test_multiple_plugins_independent(tmp_path):
     cache.invalidate("plugin-a")
     assert cache.get("plugin-a") is None
     assert cache.get("plugin-b") == "v2.0.0"
+
+
+def test_get_or_check_cache_hit_does_not_refresh_timestamp(tmp_path):
+    """Cache hit should NOT refresh checked_at — TTL should eventually expire."""
+    import time
+
+    cache = UpgradeCache(path=tmp_path / "cache.json")
+    cache.set("my-plugin", "v2.0.0")
+
+    raw = json.loads((tmp_path / "cache.json").read_text(encoding="utf-8"))
+    original_checked_at = raw["plugins"]["my-plugin"]["checked_at"]
+
+    time.sleep(0.1)
+
+    with patch("copilotsetup.upgrade_cache.check_plugin") as mock_check:
+        mock_check.return_value = PluginUpgradeInfo(
+            name="my-plugin",
+            path=None,
+            status="up-to-date",
+            current_version="v1.0.0",
+            latest_version="v2.0.0",
+            network_verified=True,
+        )
+        cache.get_or_check("my-plugin", "/fake/path", "1.0.0")
+
+    raw2 = json.loads((tmp_path / "cache.json").read_text(encoding="utf-8"))
+    assert raw2["plugins"]["my-plugin"]["checked_at"] == original_checked_at
+
+
+def test_get_or_check_skips_unverified_up_to_date_cache_write(tmp_path):
+    """Up-to-date results from local fallback should not populate the cache."""
+    cache_path = tmp_path / "cache.json"
+    cache = UpgradeCache(path=cache_path)
+
+    with patch("copilotsetup.upgrade_cache.check_plugin") as mock_check:
+        mock_check.return_value = PluginUpgradeInfo(
+            name="my-plugin",
+            path=None,
+            status="up-to-date",
+            current_version="v1.0.0",
+            network_verified=False,
+        )
+        cache.get_or_check("my-plugin", "/fake/path", "1.0.0")
+
+    assert not cache_path.exists()
+
+
+def test_singleton_returns_same_instance():
+    """get_instance() should return the same object."""
+    UpgradeCache._instance = None
+    try:
+        a = UpgradeCache.get_instance()
+        b = UpgradeCache.get_instance()
+        assert a is b
+    finally:
+        UpgradeCache._instance = None
