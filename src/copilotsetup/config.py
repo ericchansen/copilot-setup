@@ -83,3 +83,8 @@ def profiles_dir() -> Path:
 
 def mcp_oauth_dir() -> Path:
     return copilot_home() / "mcp-oauth-config"
+
+
+def upgrade_cache_json() -> Path:
+    """Return the path for the upgrade check result cache."""
+    return copilot_home() / "upgrade-cache.json"
