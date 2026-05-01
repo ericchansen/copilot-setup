@@ -38,15 +38,17 @@ class PluginsTab(BaseTab):
         """Kick off background upgrade detection for git-backed plugins."""
         import threading
 
-        from copilotsetup.plugin_upgrades import check_all
+        from copilotsetup.upgrade_cache import UpgradeCache
 
         plugins = [(p.name, p.install_path, p.version) for p in items if p.installed]
         if not plugins:
             return
 
+        cache = UpgradeCache()
+
         def _run() -> None:
             try:
-                results = check_all(plugins)
+                results = [cache.get_or_check(name, path, version) for name, path, version in plugins]
                 result_map = {r.name: r for r in results}
                 # call_from_thread is an App method, not a Widget method
                 self.app.call_from_thread(self._apply_upgrades, result_map)
@@ -192,6 +194,9 @@ class PluginsTab(BaseTab):
         try:
             result = run_copilot("plugin", "update", item.name, timeout=180)
             if result.returncode == 0:
+                from copilotsetup.upgrade_cache import UpgradeCache
+
+                UpgradeCache().invalidate(item.name)
                 self.notify(f"Upgraded {item.name}", title="Upgrade Plugin")
                 self.refresh_data()
             else:

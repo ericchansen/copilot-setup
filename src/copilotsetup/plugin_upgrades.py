@@ -11,6 +11,7 @@ version.  A ``config_version`` fallback covers repos with no local tags.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from collections.abc import Callable
@@ -47,6 +48,41 @@ class PluginUpgradeInfo:
         return f"↑ {self.latest_version}" if self.upgrade_available else ""
 
 
+def _git_env(*, gh_token_timeout: float = 5.0) -> dict[str, str]:
+    """Build a non-interactive, auth-aware git environment."""
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    ssh_cmd = env.get("GIT_SSH_COMMAND", "ssh")
+    if "-oBatchMode=yes" not in ssh_cmd:
+        ssh_cmd = ssh_cmd + " -oBatchMode=yes"
+    env["GIT_SSH_COMMAND"] = ssh_cmd
+
+    token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
+    if not token:
+        try:
+            gh = subprocess.run(
+                ["gh", "auth", "token"],
+                capture_output=True,
+                text=True,
+                timeout=gh_token_timeout,
+            )
+            if gh.returncode == 0:
+                token = gh.stdout.strip() or None
+        except Exception:
+            pass
+
+    if token:
+        try:
+            count = int(env.get("GIT_CONFIG_COUNT", "0") or "0")
+        except ValueError:
+            count = 0
+        env[f"GIT_CONFIG_KEY_{count}"] = f"url.https://x-access-token:{token}@github.com/.insteadOf"
+        env[f"GIT_CONFIG_VALUE_{count}"] = "https://github.com/"
+        env["GIT_CONFIG_COUNT"] = str(count + 1)
+
+    return env
+
+
 def _run_git(args: list[str], cwd: Path, *, timeout: float = 30.0) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -54,6 +90,7 @@ def _run_git(args: list[str], cwd: Path, *, timeout: float = 30.0) -> subprocess
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=_git_env(),
     )
 
 
@@ -111,6 +148,8 @@ def check_plugin(
     install_path: str,
     name: str,
     config_version: str = "",
+    *,
+    _cached_latest: str | None = None,
 ) -> PluginUpgradeInfo:
     """Check one plugin for an available upgrade (tag-based comparison).
 
@@ -139,21 +178,6 @@ def check_plugin(
         info.detail = "not a git checkout"
         return info
 
-    # Fetch tags from origin FIRST so newly-installed plugins have tags to
-    # compare against (previously this happened after tag detection, causing
-    # repos with no local tags to bail out early).
-    try:
-        fetch = _run_git(["fetch", "--tags", "--quiet"], path, timeout=10.0)
-    except Exception as exc:
-        info.status = STATUS_ERROR
-        info.detail = f"git fetch raised: {exc}"
-        return info
-
-    if fetch.returncode != 0:
-        info.status = STATUS_ERROR
-        info.detail = f"git fetch failed: {(fetch.stderr or fetch.stdout).strip()}"
-        return info
-
     # Detect current version: exact tag → nearest ancestor tag → config.json
     current = _get_current_tag(path)
     if current is None and config_version:
@@ -170,7 +194,19 @@ def check_plugin(
 
     info.current_version = current
 
-    remote_tags = _list_remote_tags(path)
+    if _cached_latest is not None:
+        remote_tags = [_cached_latest]
+    else:
+        try:
+            fetch = _run_git(["fetch", "--tags", "--quiet"], path, timeout=10.0)
+        except Exception:
+            fetch = None
+        fetch_failed = fetch is None or fetch.returncode != 0
+        remote_tags = _list_remote_tags(path) if not fetch_failed else []
+        if not remote_tags:
+            local = _run_git(["tag", "-l"], path, timeout=5.0)
+            remote_tags = local.stdout.strip().splitlines() if local.returncode == 0 else []
+
     latest = _highest_semver_tag(remote_tags) if remote_tags else None
     if latest is None:
         info.status = STATUS_NO_UPSTREAM
