@@ -38,6 +38,7 @@ class PluginUpgradeInfo:
     detail: str = ""
     current_version: str = ""
     latest_version: str = ""
+    network_verified: bool = False
 
     @property
     def upgrade_available(self) -> bool:
@@ -83,6 +84,21 @@ def _git_env(*, gh_token_timeout: float = 5.0) -> dict[str, str]:
     return env
 
 
+_cached_git_env: dict[str, str] | None = None
+
+
+def _get_or_build_git_env() -> dict[str, str]:
+    """Return a cached non-interactive git environment.
+
+    The environment is built once per process and reused for all git
+    operations within the same session.
+    """
+    global _cached_git_env
+    if _cached_git_env is None:
+        _cached_git_env = _git_env()
+    return _cached_git_env
+
+
 def _run_git(args: list[str], cwd: Path, *, timeout: float = 30.0) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -90,7 +106,7 @@ def _run_git(args: list[str], cwd: Path, *, timeout: float = 30.0) -> subprocess
         capture_output=True,
         text=True,
         timeout=timeout,
-        env=_git_env(),
+        env=_get_or_build_git_env(),
     )
 
 
@@ -194,6 +210,7 @@ def check_plugin(
 
     info.current_version = current
 
+    fetch_failed = False
     if _cached_latest is not None:
         remote_tags = [_cached_latest]
     else:
@@ -202,10 +219,13 @@ def check_plugin(
         except Exception:
             fetch = None
         fetch_failed = fetch is None or fetch.returncode != 0
-        remote_tags = _list_remote_tags(path) if not fetch_failed else []
+        remote_tags = _list_remote_tags(path)
         if not remote_tags:
             local = _run_git(["tag", "-l"], path, timeout=5.0)
             remote_tags = local.stdout.strip().splitlines() if local.returncode == 0 else []
+
+    if _cached_latest is not None or not fetch_failed:
+        info.network_verified = True
 
     latest = _highest_semver_tag(remote_tags) if remote_tags else None
     if latest is None:

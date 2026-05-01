@@ -22,13 +22,20 @@ from copilotsetup.utils.file_io import read_json, write_json
 
 logger = logging.getLogger(__name__)
 
-_CACHEABLE_STATUSES = frozenset({STATUS_UPGRADABLE, STATUS_UP_TO_DATE})
 _SCHEMA_VERSION = 1
 _TTL = timedelta(hours=24)
 
 
 class UpgradeCache:
     """Read-through cache for plugin upgrade check results."""
+
+    _instance: UpgradeCache | None = None
+
+    @classmethod
+    def get_instance(cls) -> UpgradeCache:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def __init__(self, path=None):
         self._path = path if path is not None else upgrade_cache_json()
@@ -85,11 +92,16 @@ class UpgradeCache:
                 del self._data["plugins"][name]
                 self._flush()
 
-    def get_or_check(self, name: str, install_path: str, config_version: str = "") -> PluginUpgradeInfo:
-        cached_latest = self.get(name)
+    def get_or_check(
+        self, name: str, install_path: str, config_version: str = "", *, force: bool = False
+    ) -> PluginUpgradeInfo:
+        cached_latest = None if force else self.get(name)
         info = check_plugin(install_path, name, config_version, _cached_latest=cached_latest)
-        if info.status in _CACHEABLE_STATUSES:
-            version_to_cache = info.latest_version or info.current_version
-            if version_to_cache:
-                self.set(name, version_to_cache)
+        if cached_latest is None:
+            # Only cache when network was actually consulted.
+            cacheable = info.status == STATUS_UPGRADABLE or (info.status == STATUS_UP_TO_DATE and info.network_verified)
+            if cacheable:
+                version_to_cache = info.latest_version or info.current_version
+                if version_to_cache:
+                    self.set(name, version_to_cache)
         return info
