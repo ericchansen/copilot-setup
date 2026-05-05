@@ -219,8 +219,14 @@ class PluginsTab(BaseTab):
             from copilotsetup.upgrade_cache import UpgradeCache
 
             UpgradeCache.get_instance().invalidate(item.name)
-            set_plugin_version(item.name, item.upgrade_version)
-            self.notify(f"Upgraded {item.name} → {item.upgrade_version}", title="Upgrade Plugin")
+            if not set_plugin_version(item.name, item.upgrade_version):
+                self.notify(
+                    f"Upgraded {item.name} → {item.upgrade_version} (version not persisted to config)",
+                    severity="warning",
+                    title="Upgrade Plugin",
+                )
+            else:
+                self.notify(f"Upgraded {item.name} → {item.upgrade_version}", title="Upgrade Plugin")
             self.refresh_data()
         else:
             self.notify(f"Failed: {detail}", severity="error", title="Upgrade Plugin")

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from copilotsetup.config import config_json, installed_plugins_dir
-from copilotsetup.utils.file_io import read_json
+from copilotsetup.utils.file_io import read_json, write_json
 
 
 def _detect_installed_version(install_path: str) -> str:
@@ -196,7 +196,7 @@ def set_plugin_version(name: str, version: str) -> bool:
         return False
 
     try:
-        cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        write_json(cfg_path, data)
     except OSError:
         return False
     return True
