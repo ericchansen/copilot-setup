@@ -11,12 +11,15 @@ version.  A ``config_version`` fallback covers repos with no local tags.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
@@ -170,14 +173,13 @@ def upgrade_local_plugin(install_path: str, target_version: str) -> tuple[bool, 
     if not path.exists():
         return False, f"path does not exist: {path}"
 
-    # Fetch latest tags from origin
+    # Fetch latest tags (best-effort — tag may already exist locally)
     try:
-        fetch = _run_git(["fetch", "--tags", "--quiet", "origin"], path, timeout=30.0)
+        fetch = _run_git(["fetch", "--tags", "--quiet"], path, timeout=30.0)
         if fetch.returncode != 0:
-            stderr = fetch.stderr.strip()
-            return False, f"git fetch failed: {stderr or 'unknown error'}"
+            logger.warning("git fetch --tags failed for %s (continuing with local tags)", path)
     except Exception as exc:
-        return False, f"git fetch error: {exc}"
+        logger.warning("git fetch error for %s: %s (continuing with local tags)", path, exc)
 
     # Checkout the target tag (detached HEAD)
     try:

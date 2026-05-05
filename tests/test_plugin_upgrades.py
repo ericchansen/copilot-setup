@@ -417,7 +417,8 @@ def test_upgrade_local_plugin_path_not_exist(tmp_path):
     assert "does not exist" in detail
 
 
-def test_upgrade_local_plugin_fetch_fails(tmp_path):
+def test_upgrade_local_plugin_fetch_fails_checkout_succeeds(tmp_path):
+    """Fetch failure is non-fatal — if the tag exists locally, checkout still works."""
     import subprocess
 
     from copilotsetup.plugin_upgrades import upgrade_local_plugin
@@ -425,12 +426,35 @@ def test_upgrade_local_plugin_fetch_fails(tmp_path):
     def mock_run_git(args, cwd, *, timeout=30.0):
         if args[:2] == ["fetch", "--tags"]:
             return subprocess.CompletedProcess(args=args, returncode=128, stdout="", stderr="network error")
+        if args[0] == "checkout":
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        ok, detail = upgrade_local_plugin(str(tmp_path), "v2.0.0")
+    assert ok is True
+    assert detail == "v2.0.0"
+
+
+def test_upgrade_local_plugin_fetch_fails_checkout_fails(tmp_path):
+    """When fetch fails AND tag doesn't exist locally, checkout fails."""
+    import subprocess
+
+    from copilotsetup.plugin_upgrades import upgrade_local_plugin
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        if args[:2] == ["fetch", "--tags"]:
+            return subprocess.CompletedProcess(args=args, returncode=128, stdout="", stderr="network error")
+        if args[0] == "checkout":
+            return subprocess.CompletedProcess(
+                args=args, returncode=1, stdout="", stderr="error: pathspec 'v2.0.0' did not match"
+            )
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
 
     with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
         ok, detail = upgrade_local_plugin(str(tmp_path), "v2.0.0")
     assert ok is False
-    assert "git fetch failed" in detail
+    assert "git checkout" in detail
 
 
 def test_upgrade_local_plugin_checkout_fails(tmp_path):
