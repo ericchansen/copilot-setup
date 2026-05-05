@@ -31,7 +31,8 @@ Or install from source for development:
 ```bash
 git clone https://github.com/ericchansen/copilot-setup.git
 cd copilot-setup
-uv tool install -e .
+uv tool install -e .           # editable install
+uv tool install ruff pytest    # dev tools (for linting/testing)
 ```
 
 :::tip Why uv over pip?
