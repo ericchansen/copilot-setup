@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from copilotsetup.data.plugins import PluginInfo, PluginProvider, set_plugin_enabled, set_plugin_version
+from copilotsetup.data.plugins import PluginInfo, PluginProvider, set_plugin_enabled
 
 
 def test_returns_empty_when_config_missing(tmp_path, monkeypatch):
@@ -252,42 +252,3 @@ def test_set_plugin_enabled_with_jsonc_config(tmp_path, monkeypatch):
     assert set_plugin_enabled("p", False) is True
     reloaded = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert reloaded["installedPlugins"][0]["enabled"] is False
-
-
-# --- set_plugin_version tests ---
-
-
-def test_set_plugin_version_updates_version(tmp_path, monkeypatch):
-    """set_plugin_version writes the new version to config.json."""
-    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
-    cfg = {"installedPlugins": [{"name": "my-plugin", "version": "1.0.0", "marketplace": "local"}]}
-    (tmp_path / "config.json").write_text(json.dumps(cfg))
-    assert set_plugin_version("my-plugin", "2.0.0") is True
-    reloaded = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
-    assert reloaded["installedPlugins"][0]["version"] == "2.0.0"
-
-
-def test_set_plugin_version_returns_false_for_unknown_plugin(tmp_path, monkeypatch):
-    """set_plugin_version returns False when plugin is not in config."""
-    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
-    cfg = {"installedPlugins": [{"name": "other", "version": "1.0.0"}]}
-    (tmp_path / "config.json").write_text(json.dumps(cfg))
-    assert set_plugin_version("missing-plugin", "2.0.0") is False
-
-
-def test_set_plugin_version_returns_false_when_no_config(tmp_path, monkeypatch):
-    """set_plugin_version returns False when config.json doesn't exist."""
-    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
-    assert set_plugin_version("any", "1.0.0") is False
-
-
-def test_set_plugin_version_handles_jsonc(tmp_path, monkeypatch):
-    """set_plugin_version handles JSONC comments in config.json."""
-    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
-    content = "// comment\n" + json.dumps(
-        {"installedPlugins": [{"name": "p", "version": "0.1.0", "marketplace": "local"}]}
-    )
-    (tmp_path / "config.json").write_text(content)
-    assert set_plugin_version("p", "0.2.0") is True
-    reloaded = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
-    assert reloaded["installedPlugins"][0]["version"] == "0.2.0"
