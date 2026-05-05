@@ -19,7 +19,7 @@ class McpServerInfo:
     command: str = ""
     args: tuple[str, ...] = ()
     url: str = ""
-    source: str = "config"
+    source: str = "user"
     env_ok: bool = True
     missing_env: tuple[str, ...] = ()
     health: str = ""
@@ -166,7 +166,7 @@ class McpServerProvider:
             url = str(entry.get("url", ""))
             env_overrides = entry.get("env")
             env_ok, missing = _check_env(env_overrides if isinstance(env_overrides, dict) else None)
-            source = plugin_map.get(name, "config")
+            source = plugin_map.get(name, "user")
             result.append(
                 McpServerInfo(
                     name=str(name),

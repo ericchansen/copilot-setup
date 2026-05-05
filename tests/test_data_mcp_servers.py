@@ -267,12 +267,12 @@ def test_plugin_only_servers_appear(tmp_path, monkeypatch):
 
 
 def test_source_defaults_to_config(tmp_path, monkeypatch):
-    """Servers not matching any plugin get source='config'."""
+    """Servers not matching any plugin get source='user'."""
     monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
     _write_config(tmp_path, {"mcpServers": {"standalone": {"command": "node"}}})
     items = McpServerProvider().load()
     assert len(items) == 1
-    assert items[0].source == "config"
+    assert items[0].source == "user"
 
 
 def test_raw_entry_populated_for_config_server(tmp_path, monkeypatch):
