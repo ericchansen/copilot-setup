@@ -20,7 +20,7 @@ def test_scans_real_directories(monkeypatch, tmp_path):
     assert len(items) == 1
     assert items[0].name == "my-skill"
     assert items[0].is_real_dir is True
-    assert items[0].source == "local"
+    assert items[0].source == "user"
 
 
 def test_items_are_frozen():

@@ -15,7 +15,7 @@ class SkillInfo:
     """A single skill entry discovered under the skills directory."""
 
     name: str
-    source: str = ""
+    source: str = "user"
     link_target: str = ""
     link_ok: bool = False
     is_linked: bool = False
@@ -65,7 +65,7 @@ class SkillProvider:
                 if target_str:
                     source = Path(target_str).parent.name
                 elif real_dir:
-                    source = "local"
+                    source = "user"
                 seen.add(entry.name)
                 result.append(
                     SkillInfo(
