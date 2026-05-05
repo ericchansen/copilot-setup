@@ -404,3 +404,69 @@ def test_git_env_memoized():
         assert mock_git_env.call_count == 1
     finally:
         mod._cached_git_env = None
+
+
+# --- upgrade_local_plugin ---
+
+
+def test_upgrade_local_plugin_path_not_exist(tmp_path):
+    from copilotsetup.plugin_upgrades import upgrade_local_plugin
+
+    ok, detail = upgrade_local_plugin(str(tmp_path / "nonexistent"), "v2.0.0")
+    assert ok is False
+    assert "does not exist" in detail
+
+
+def test_upgrade_local_plugin_fetch_fails(tmp_path):
+    import subprocess
+
+    from copilotsetup.plugin_upgrades import upgrade_local_plugin
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        if args[:2] == ["fetch", "--tags"]:
+            return subprocess.CompletedProcess(args=args, returncode=128, stdout="", stderr="network error")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        ok, detail = upgrade_local_plugin(str(tmp_path), "v2.0.0")
+    assert ok is False
+    assert "git fetch failed" in detail
+
+
+def test_upgrade_local_plugin_checkout_fails(tmp_path):
+    import subprocess
+
+    from copilotsetup.plugin_upgrades import upgrade_local_plugin
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        if args[:2] == ["fetch", "--tags"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        if args[0] == "checkout":
+            return subprocess.CompletedProcess(
+                args=args, returncode=1, stdout="", stderr="error: pathspec 'v9.9.9' did not match"
+            )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        ok, detail = upgrade_local_plugin(str(tmp_path), "v9.9.9")
+    assert ok is False
+    assert "checkout" in detail
+
+
+def test_upgrade_local_plugin_success(tmp_path):
+    import subprocess
+
+    from copilotsetup.plugin_upgrades import upgrade_local_plugin
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        if args[:2] == ["fetch", "--tags"]:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        if args[0] == "checkout":
+            assert args[1] == "v2.0.0"
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        ok, detail = upgrade_local_plugin(str(tmp_path), "v2.0.0")
+    assert ok is True
+    assert detail == "v2.0.0"
