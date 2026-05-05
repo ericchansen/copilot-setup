@@ -200,46 +200,17 @@ class PluginsTab(BaseTab):
             return
         self.notify(f"Upgrading {item.name}…", title="Upgrade Plugin")
         try:
-            if item.source == "local" and item.install_path and item.upgrade_version:
-                self._upgrade_local(item)
+            result = run_copilot("plugin", "update", item.name, timeout=180)
+            if result.returncode == 0:
+                from copilotsetup.upgrade_cache import UpgradeCache
+
+                UpgradeCache.get_instance().invalidate(item.name)
+                self.notify(f"Upgraded {item.name}", title="Upgrade Plugin")
+                self.refresh_data()
             else:
-                self._upgrade_marketplace(item)
+                msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                self.notify(f"Failed: {msg}", severity="error", title="Upgrade Plugin")
         except FileNotFoundError:
             self.notify("copilot CLI not found", severity="error", title="Upgrade")
         except Exception as exc:
             self.notify(f"Error: {exc}", severity="error", title="Upgrade")
-
-    def _upgrade_local(self, item: PluginInfo) -> None:
-        """Upgrade a local git-backed plugin by checking out the latest tag."""
-        from copilotsetup.data.plugins import set_plugin_version
-        from copilotsetup.plugin_upgrades import upgrade_local_plugin
-
-        ok, detail = upgrade_local_plugin(item.install_path, item.upgrade_version)
-        if ok:
-            from copilotsetup.upgrade_cache import UpgradeCache
-
-            UpgradeCache.get_instance().invalidate(item.name)
-            if not set_plugin_version(item.name, item.upgrade_version):
-                self.notify(
-                    f"Upgraded {item.name} → {item.upgrade_version} (version not persisted to config)",
-                    severity="warning",
-                    title="Upgrade Plugin",
-                )
-            else:
-                self.notify(f"Upgraded {item.name} → {item.upgrade_version}", title="Upgrade Plugin")
-            self.refresh_data()
-        else:
-            self.notify(f"Failed: {detail}", severity="error", title="Upgrade Plugin")
-
-    def _upgrade_marketplace(self, item: PluginInfo) -> None:
-        """Upgrade a marketplace plugin via the Copilot CLI."""
-        result = run_copilot("plugin", "update", item.name, timeout=180)
-        if result.returncode == 0:
-            from copilotsetup.upgrade_cache import UpgradeCache
-
-            UpgradeCache.get_instance().invalidate(item.name)
-            self.notify(f"Upgraded {item.name}", title="Upgrade Plugin")
-            self.refresh_data()
-        else:
-            msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
-            self.notify(f"Failed: {msg}", severity="error", title="Upgrade Plugin")
