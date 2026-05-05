@@ -8,8 +8,10 @@ and remove plugins or MCP servers without leaving the terminal.
 
 ## Installation
 
+Install as an isolated CLI tool with [uv](https://docs.astral.sh/uv/) (recommended):
+
 ```bash
-pip install copilot-setup
+uv tool install copilot-setup
 ```
 
 Or run directly without installing:
@@ -18,7 +20,20 @@ Or run directly without installing:
 uvx copilot-setup
 ```
 
+For **development** from a local clone:
+
+```bash
+uv tool install -e ~/repos/copilot-setup
+```
+
+The `-e` flag enables editable mode — code changes are reflected immediately without reinstalling.
+
 Requires Python ≥ 3.10.
+
+> **Why `uv tool install` over `pip install`?** Global pip pollutes your system Python
+> and causes version conflicts. `uv tool install` gives each tool its own isolated venv
+> (like `pipx`, but faster). If you previously installed with `pip install copilot-setup`,
+> clean it up with `pip uninstall copilot-setup` then reinstall via uv.
 
 ## Usage
 

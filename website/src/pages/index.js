@@ -25,7 +25,7 @@ function HomepageHeader() {
           className="hero-screenshot"
         />
         <div className={styles.installRow}>
-          <code className="install-snippet">pip install copilot-setup</code>
+          <code className="install-snippet">uv tool install copilot-setup</code>
         </div>
         <div className={styles.buttons}>
           <Link

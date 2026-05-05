@@ -82,8 +82,8 @@ Reusable UI components:
 ### Contributing
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
+# Install in editable mode
+uv tool install -e .
 
 # Run all checks (must pass before committing)
 python -m ruff check .           # lint
