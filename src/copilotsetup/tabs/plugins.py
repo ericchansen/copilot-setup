@@ -211,6 +211,7 @@ class PluginsTab(BaseTab):
 
     def _upgrade_local(self, item: PluginInfo) -> None:
         """Upgrade a local git-backed plugin by checking out the latest tag."""
+        from copilotsetup.data.plugins import set_plugin_version
         from copilotsetup.plugin_upgrades import upgrade_local_plugin
 
         ok, detail = upgrade_local_plugin(item.install_path, item.upgrade_version)
@@ -218,6 +219,7 @@ class PluginsTab(BaseTab):
             from copilotsetup.upgrade_cache import UpgradeCache
 
             UpgradeCache.get_instance().invalidate(item.name)
+            set_plugin_version(item.name, item.upgrade_version)
             self.notify(f"Upgraded {item.name} → {item.upgrade_version}", title="Upgrade Plugin")
             self.refresh_data()
         else:
