@@ -16,7 +16,7 @@ class AgentInfo:
     name: str
     path: str = ""
     description: str = ""
-    source: str = ""
+    source: str = "user"
 
 
 def _read_description(path: Path) -> str:
