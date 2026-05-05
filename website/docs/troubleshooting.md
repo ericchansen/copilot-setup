@@ -26,11 +26,12 @@ Tools like [1MCP](https://github.com/1mcp-app/agent) aggregate multiple MCP serv
 ### Common Issues
 
 #### "copilot-setup: command not found"
-Make sure the package is installed and the Python scripts directory is on your PATH:
+Make sure the package is installed and uv's tool bin directory is on your PATH:
 ```bash
-pip install copilot-setup
+uv tool install copilot-setup
 # If installed but not found, check:
-python -m copilotsetup
+uv tool dir         # shows where uv puts tool binaries
+python -m copilotsetup  # fallback: run as module
 ```
 
 #### Empty tabs / No data showing

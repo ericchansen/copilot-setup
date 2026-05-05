@@ -14,13 +14,13 @@ title: Getting Started
 
 ## Installation
 
-Install from PyPI:
+Install as an isolated CLI tool with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-pip install copilot-setup
+uv tool install copilot-setup
 ```
 
-Or run directly without installing (requires [uv](https://docs.astral.sh/uv/)):
+Or run directly without installing:
 
 ```bash
 uvx copilot-setup
@@ -31,8 +31,12 @@ Or install from source for development:
 ```bash
 git clone https://github.com/ericchansen/copilot-setup.git
 cd copilot-setup
-pip install -e .
+uv tool install -e .
 ```
+
+:::tip Why uv over pip?
+Global `pip install` pollutes your system Python and causes version conflicts. `uv tool install` gives each tool its own isolated venv — faster than pipx, no conflicts. If you previously used `pip install copilot-setup`, clean up with `pip uninstall copilot-setup` first.
+:::
 
 ## First Launch
 
