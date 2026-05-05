@@ -41,6 +41,7 @@ class PluginInfo:
     bundled_agents: tuple[str, ...] = ()
     upgrade_available: bool = False
     upgrade_summary: str = ""
+    upgrade_version: str = ""
 
     @property
     def status(self) -> str:

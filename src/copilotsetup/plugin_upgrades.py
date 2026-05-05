@@ -160,6 +160,37 @@ def _highest_semver_tag(tags: list[str]) -> str | None:
     return valid[-1][0]
 
 
+def upgrade_local_plugin(install_path: str, target_version: str) -> tuple[bool, str]:
+    """Upgrade a local git-backed plugin by checking out the target tag.
+
+    Returns ``(success, detail)`` — detail is an error message on failure or
+    the checked-out tag on success.
+    """
+    path = Path(install_path)
+    if not path.exists():
+        return False, f"path does not exist: {path}"
+
+    # Fetch latest tags from origin
+    try:
+        fetch = _run_git(["fetch", "--tags", "--quiet", "origin"], path, timeout=30.0)
+        if fetch.returncode != 0:
+            stderr = fetch.stderr.strip()
+            return False, f"git fetch failed: {stderr or 'unknown error'}"
+    except Exception as exc:
+        return False, f"git fetch error: {exc}"
+
+    # Checkout the target tag (detached HEAD)
+    try:
+        checkout = _run_git(["checkout", target_version], path, timeout=10.0)
+        if checkout.returncode != 0:
+            stderr = checkout.stderr.strip()
+            return False, f"git checkout {target_version} failed: {stderr or 'unknown error'}"
+    except Exception as exc:
+        return False, f"git checkout error: {exc}"
+
+    return True, target_version
+
+
 def check_plugin(
     install_path: str,
     name: str,
