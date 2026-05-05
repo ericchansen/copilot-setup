@@ -82,13 +82,17 @@ Reusable UI components:
 ### Contributing
 
 ```bash
-# Install in editable mode
+# Install dev tools (one-time)
+uv tool install ruff
+uv tool install pytest
+
+# Install copilot-setup in editable mode
 uv tool install -e .
 
 # Run all checks (must pass before committing)
-python -m ruff check .           # lint
-python -m ruff format --check .  # format
-python -m pytest tests/ -v       # test
+ruff check .           # lint
+ruff format --check .  # format
+pytest tests/ -v       # test
 ```
 
 Tests are self-contained with fixture data — no tests depend on your local `~/.copilot/` state.

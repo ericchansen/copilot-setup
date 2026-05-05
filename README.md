@@ -23,7 +23,10 @@ uvx copilot-setup
 For **development** from a local clone:
 
 ```bash
-uv tool install -e ~/repos/copilot-setup
+git clone https://github.com/ericchansen/copilot-setup.git
+cd copilot-setup
+uv tool install -e .           # editable install
+uv tool install ruff pytest    # dev tools
 ```
 
 The `-e` flag enables editable mode — code changes are reflected immediately without reinstalling.
