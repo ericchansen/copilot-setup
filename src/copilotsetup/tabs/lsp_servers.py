@@ -17,7 +17,7 @@ class LspServersTab(BaseTab):
         ("Status", 10),
         ("Reason", 25),
     ]
-    available_actions: ClassVar[list[str]] = []
+    available_actions: ClassVar[list[str]] = ["j"]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

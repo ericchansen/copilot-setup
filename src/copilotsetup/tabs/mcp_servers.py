@@ -22,7 +22,7 @@ class McpServersTab(BaseTab):
         ("Health", 10),
         ("Reason", 25),
     ]
-    available_actions: ClassVar[list[str]] = ["a", "x", "h"]
+    available_actions: ClassVar[list[str]] = ["a", "x", "h", "j"]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

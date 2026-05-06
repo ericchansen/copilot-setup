@@ -152,8 +152,8 @@ class TestRowForProvisional:
         row = tab.row_for(item)
 
         # Upgrade column is index 4
-        assert "⏳" in str(row[4])
-        assert "↑ v2.0.0" in str(row[4])
+        assert "⏳" in str(row[6])
+        assert "↑ v2.0.0" in str(row[6])
 
     def test_row_no_hourglass_for_fresh(self):
         """Fresh (non-provisional) results should not show ⏳."""
@@ -169,8 +169,8 @@ class TestRowForProvisional:
         tab.row_for = PluginsTab.row_for.__get__(tab, PluginsTab)
         row = tab.row_for(item)
 
-        assert "⏳" not in str(row[4])
-        assert "↑ v2.0.0" in str(row[4])
+        assert "⏳" not in str(row[6])
+        assert "↑ v2.0.0" in str(row[6])
 
     def test_row_shows_hourglass_for_provisional_no_upgrade(self):
         """Provisional 'no upgrade' should also show ⏳ suffix."""
@@ -185,8 +185,8 @@ class TestRowForProvisional:
         tab.row_for = PluginsTab.row_for.__get__(tab, PluginsTab)
         row = tab.row_for(item)
 
-        assert "⏳" in str(row[4])
-        assert "—" in str(row[4])
+        assert "⏳" in str(row[6])
+        assert "—" in str(row[6])
 
 
 class TestPluginInfoProvisionalField:
@@ -286,8 +286,8 @@ class TestDevState:
         tab.row_for = PluginsTab.row_for.__get__(tab, PluginsTab)
         row = tab.row_for(item)
 
-        assert "dev: feat/gh-writer" in str(row[4])
-        assert "↑" not in str(row[4])
+        assert "dev: feat/gh-writer" in str(row[6])
+        assert "↑" not in str(row[6])
 
     def test_row_shows_hourglass_for_provisional_dev(self):
         """Provisional dev results also get the ⏳ marker."""
@@ -304,8 +304,8 @@ class TestDevState:
         tab.row_for = PluginsTab.row_for.__get__(tab, PluginsTab)
         row = tab.row_for(item)
 
-        assert "dev: main" in str(row[4])
-        assert "⏳" in str(row[4])
+        assert "dev: main" in str(row[6])
+        assert "⏳" in str(row[6])
 
     def test_handle_upgrade_short_circuits_for_dev_install(self):
         """Pressing 'u' on a dev install must NOT call copilot CLI."""

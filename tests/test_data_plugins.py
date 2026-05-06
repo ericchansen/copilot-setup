@@ -252,3 +252,74 @@ def test_set_plugin_enabled_with_jsonc_config(tmp_path, monkeypatch):
     assert set_plugin_enabled("p", False) is True
     reloaded = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert reloaded["installedPlugins"][0]["enabled"] is False
+
+
+# ── source_type, source_repo, raw_data tests ─────────────────────────
+
+
+def test_marketplace_plugin_source_fields(tmp_path, monkeypatch):
+    """Marketplace installs have empty source_type/source_repo."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    cfg = {"installedPlugins": [{"name": "m", "marketplace": "copilot-config", "version": "1.0.0"}]}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].source_type == ""
+    assert items[0].source_repo == ""
+
+
+def test_github_direct_source_fields(tmp_path, monkeypatch):
+    """GitHub-direct installs populate source_type='github' and source_repo."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    cfg = {
+        "installedPlugins": [
+            {
+                "name": "g",
+                "marketplace": "",
+                "source": {"source": "github", "repo": "owner/repo"},
+            }
+        ]
+    }
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].source_type == "github"
+    assert items[0].source_repo == "owner/repo"
+
+
+def test_local_path_source_fields(tmp_path, monkeypatch):
+    """Local-path installs populate source_type='local' and source_repo=path."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    cfg = {
+        "installedPlugins": [
+            {
+                "name": "lp",
+                "marketplace": "",
+                "source": {"source": "local", "path": "/abs/path"},
+            }
+        ]
+    }
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].source_type == "local"
+    assert items[0].source_repo == "/abs/path"
+
+
+def test_bare_string_source_stays_empty(tmp_path, monkeypatch):
+    """A bare string source value (not a dict) leaves fields empty."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    cfg = {"installedPlugins": [{"name": "bs", "marketplace": "", "source": "just-a-string"}]}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].source_type == ""
+    assert items[0].source_repo == ""
+
+
+def test_raw_data_populated(tmp_path, monkeypatch):
+    """raw_data should contain the original config dict."""
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path))
+    entry = {"name": "rd", "marketplace": "copilot", "version": "2.0.0"}
+    cfg = {"installedPlugins": [entry]}
+    (tmp_path / "config.json").write_text(json.dumps(cfg))
+    items = PluginProvider().load()
+    assert items[0].raw_data["name"] == "rd"
+    assert items[0].raw_data["marketplace"] == "copilot"
+    assert items[0].raw_data["version"] == "2.0.0"

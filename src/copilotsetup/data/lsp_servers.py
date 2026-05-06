@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from copilotsetup.config import lsp_config_json
 from copilotsetup.platform_ops import validate_lsp_binary
@@ -17,6 +17,7 @@ class LspInfo:
     command: str
     args: tuple[str, ...] = ()
     binary_ok: bool = False
+    raw_data: dict = field(default_factory=dict, hash=False, compare=False)
 
     @property
     def status(self) -> str:
@@ -52,6 +53,7 @@ class LspServerProvider:
                     command=command,
                     args=tuple(str(a) for a in args),
                     binary_ok=binary_ok,
+                    raw_data=dict(entry),
                 )
             )
         return result
