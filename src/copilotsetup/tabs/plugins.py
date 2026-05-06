@@ -104,9 +104,35 @@ class PluginsTab(BaseTab):
                     upgrade_summary=info.summary,
                     upgrade_version=info.latest_version,
                     upgrade_provisional=provisional,
+                    dev_summary="",
+                    dev_branch="",
+                    dev_commits_ahead=0,
+                    latest_release=info.latest_version,
+                )
+            elif info and info.dev_summary:
+                item = replace(
+                    item,
+                    upgrade_available=False,
+                    upgrade_summary="",
+                    upgrade_version="",
+                    upgrade_provisional=provisional,
+                    dev_summary=info.dev_summary,
+                    dev_branch=info.dev_branch,
+                    dev_commits_ahead=info.dev_commits_ahead,
+                    latest_release=info.latest_version,
                 )
             else:
-                item = replace(item, upgrade_summary="—", upgrade_provisional=provisional)
+                item = replace(
+                    item,
+                    upgrade_available=False,
+                    upgrade_summary="—",
+                    upgrade_version="",
+                    upgrade_provisional=provisional,
+                    dev_summary="",
+                    dev_branch="",
+                    dev_commits_ahead=0,
+                    latest_release=(info.latest_version if info else ""),
+                )
             new_items.append(item)
         self._items = new_items
         self._apply_filter()
@@ -116,9 +142,14 @@ class PluginsTab(BaseTab):
 
     def row_for(self, item: PluginInfo) -> tuple:
         status: Status = item.status  # type: ignore[assignment]
-        upgrade = item.upgrade_summary if item.upgrade_summary else "…"
-        if item.upgrade_provisional and item.upgrade_summary:
-            upgrade = f"{item.upgrade_summary} ⏳"
+        if item.upgrade_summary:
+            upgrade = item.upgrade_summary
+        elif item.dev_summary:
+            upgrade = item.dev_summary
+        else:
+            upgrade = "…"
+        if item.upgrade_provisional and (item.upgrade_summary or item.dev_summary):
+            upgrade = f"{upgrade} ⏳"
         return (
             item.name,
             item.source,
@@ -138,6 +169,14 @@ class PluginsTab(BaseTab):
         if item.upgrade_summary:
             suffix = " [dim](cached)[/]" if item.upgrade_provisional else ""
             parts.append(f"[bold]Upgrade:[/] [green]{item.upgrade_summary}[/green]{suffix}")
+        elif item.dev_summary:
+            suffix = " [dim](cached)[/]" if item.upgrade_provisional else ""
+            parts.append(f"[bold]Local install:[/] [yellow]{item.dev_summary}[/yellow]{suffix}")
+            if item.dev_commits_ahead:
+                parts.append(f"  [dim]{item.dev_commits_ahead} commit(s) past last ancestor tag[/dim]")
+            if item.latest_release:
+                parts.append(f"  [dim]Latest release on origin:[/dim] {item.latest_release}")
+            parts.append("  [dim]To pin to a release: cd <source>; git checkout <tag>; copilot plugin install .[/dim]")
         if item.reason:
             parts.append(f"[bold]Reason:[/] {item.reason}")
         if item.install_path:
@@ -219,6 +258,18 @@ class PluginsTab(BaseTab):
         item = self.get_selected_item()
         if item is None:
             self.notify("No plugin selected", severity="warning", title="Upgrade")
+            return
+        if item.dev_summary:
+            branch = item.dev_branch or "current branch"
+            target = item.latest_release or "<tag>"
+            self.notify(
+                f"{item.name}: local dev install on branch [bold]{branch}[/]. "
+                f"To pin to a release, run in the source repo: "
+                f"[bold]git checkout {target}; copilot plugin install .[/]",
+                severity="warning",
+                title="Upgrade",
+                timeout=12,
+            )
             return
         if not item.upgrade_available:
             self.notify(

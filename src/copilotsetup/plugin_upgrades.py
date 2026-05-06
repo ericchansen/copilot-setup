@@ -4,9 +4,15 @@ Copilot CLI installs plugins as detached HEAD checkouts at a version tag
 (e.g. ``v0.11.2``).  Detection compares the current tag against the highest
 semver tag on ``origin``.
 
-Local plugins living on a regular branch are also supported: the nearest
-ancestor tag (via ``git describe --tags --abbrev=0``) is used as the current
-version.  A ``config_version`` fallback covers repos with no local tags.
+Plugins installed from a local source path that is a git checkout on a
+*branch* (active dev work) are reported as ``STATUS_LOCAL_DEV`` instead of
+falsely claiming they can be upgraded.  ``copilot plugin update`` only does
+``git pull`` on the current branch, so an arrow that implies "click to
+upgrade to vX.Y.Z" would be misleading — the user manages their own checkout.
+
+A ``config_version`` fallback (used when no git tag describes HEAD and we
+have no branch info) covers older installs whose package.json version is
+the only signal.
 """
 
 from __future__ import annotations
@@ -29,6 +35,10 @@ STATUS_NOT_GIT = "not-git"
 STATUS_NO_UPSTREAM = "no-upstream"
 STATUS_NO_PATH = "no-path"
 STATUS_ERROR = "error"
+# HEAD is on a branch (not detached on a tag); user is doing local dev work.
+# We do not present this as upgradable because ``copilot plugin update`` would
+# only ``git pull`` the branch — it cannot meaningfully "upgrade to vX.Y.Z".
+STATUS_LOCAL_DEV = "local-dev"
 
 
 @dataclass
@@ -42,6 +52,8 @@ class PluginUpgradeInfo:
     current_version: str = ""
     latest_version: str = ""
     network_verified: bool = False
+    dev_branch: str = ""
+    dev_commits_ahead: int = 0
 
     @property
     def upgrade_available(self) -> bool:
@@ -50,6 +62,13 @@ class PluginUpgradeInfo:
     @property
     def summary(self) -> str:
         return f"↑ {self.latest_version}" if self.upgrade_available else ""
+
+    @property
+    def dev_summary(self) -> str:
+        """Human-readable dev state, e.g. ``dev: feat/x`` or empty when not on a branch."""
+        if self.status != STATUS_LOCAL_DEV or not self.dev_branch:
+            return ""
+        return f"dev: {self.dev_branch}"
 
 
 def _git_env(*, gh_token_timeout: float = 5.0) -> dict[str, str]:
@@ -120,20 +139,39 @@ def _parse_semver(tag: str) -> tuple[int, int, int] | None:
     return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
-def _get_current_tag(path: Path) -> str | None:
-    """Return the version tag for HEAD.
-
-    Tries ``--exact-match`` first (detached-HEAD installs), then falls back to
-    ``--abbrev=0`` which finds the nearest ancestor tag (branch-based repos).
-    """
+def _get_exact_tag(path: Path) -> str | None:
+    """Return the tag at HEAD, or None if HEAD is not on an exact tag."""
     result = _run_git(["describe", "--tags", "--exact-match", "HEAD"], path, timeout=5.0)
     if result.returncode == 0 and result.stdout.strip():
         return result.stdout.strip()
-    # Fallback: nearest ancestor tag (works when HEAD is ahead of a tag)
+    return None
+
+
+def _get_ancestor_tag(path: Path) -> str | None:
+    """Return the nearest ancestor tag for HEAD (no exact-match required)."""
     result = _run_git(["describe", "--tags", "--abbrev=0", "HEAD"], path, timeout=5.0)
     if result.returncode == 0 and result.stdout.strip():
         return result.stdout.strip()
     return None
+
+
+def _get_head_branch(path: Path) -> str | None:
+    """Return the branch HEAD is on, or None if HEAD is detached."""
+    result = _run_git(["symbolic-ref", "--quiet", "--short", "HEAD"], path, timeout=5.0)
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return None
+
+
+def _get_commits_ahead(path: Path, base_ref: str) -> int:
+    """Return the number of commits HEAD is ahead of ``base_ref``, or 0 on error."""
+    result = _run_git(["rev-list", "--count", f"{base_ref}..HEAD"], path, timeout=5.0)
+    if result.returncode != 0:
+        return 0
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return 0
 
 
 def _list_remote_tags(path: Path) -> list[str]:
@@ -197,22 +235,32 @@ def check_plugin(
         info.detail = "not a git checkout"
         return info
 
-    # Detect current version: exact tag → nearest ancestor tag → config.json
-    current = _get_current_tag(path)
-    if current is None and config_version:
-        # Synthesize a tag-like string so semver comparison works
+    # Determine HEAD state. Branch is authoritative: if HEAD is on a branch,
+    # we treat it as a dev install regardless of whether HEAD happens to also
+    # be at an exact tag — because ``copilot plugin update`` will ``git pull``
+    # the branch, not check out the tag, so we cannot promise tag-based
+    # upgrades land. Only a detached HEAD on an exact tag uses the upgrade
+    # flow.
+    branch = _get_head_branch(path)
+    exact_tag = _get_exact_tag(path) if branch is None else None
+
+    if exact_tag is not None:
+        current: str | None = exact_tag
+    elif branch is None and config_version:
+        # Detached HEAD with no exact tag — use config_version as a best-effort
+        # current version so we can still compare against origin tags.
         v = config_version.strip()
         if _parse_semver(v) is not None:
             current = v
         elif _parse_semver(f"v{v}") is not None:
             current = f"v{v}"
-    if current is None:
-        info.status = STATUS_NO_UPSTREAM
-        info.detail = "HEAD is not on a version tag"
-        return info
+        else:
+            current = None
+    else:
+        current = None
 
-    info.current_version = current
-
+    # Always probe remote — even in dev mode, latest_version provides useful
+    # context ("origin has v2.0.2") for the detail pane.
     fetch_failed = False
     if _cached_latest is not None:
         remote_tags = [_cached_latest]
@@ -231,6 +279,34 @@ def check_plugin(
         info.network_verified = True
 
     latest = _highest_semver_tag(remote_tags) if remote_tags else None
+
+    # Branch mode → STATUS_LOCAL_DEV. We surface latest_version (when known) so
+    # the detail pane can show "origin has vX.Y.Z" but the table never claims
+    # this is a one-click upgrade.
+    if branch is not None:
+        info.status = STATUS_LOCAL_DEV
+        info.dev_branch = branch
+        ancestor = _get_ancestor_tag(path)
+        if ancestor:
+            info.current_version = ancestor
+            info.dev_commits_ahead = _get_commits_ahead(path, ancestor)
+        if latest is not None:
+            info.latest_version = latest
+        if ancestor and info.dev_commits_ahead:
+            info.detail = f"branch {branch} ({info.dev_commits_ahead} past {ancestor})"
+        elif ancestor:
+            info.detail = f"branch {branch} (at {ancestor})"
+        else:
+            info.detail = f"branch {branch} (no ancestor tag)"
+        return info
+
+    if current is None:
+        info.status = STATUS_NO_UPSTREAM
+        info.detail = "HEAD is not on a version tag"
+        return info
+
+    info.current_version = current
+
     if latest is None:
         info.status = STATUS_NO_UPSTREAM
         info.detail = "no semver tags on origin"
