@@ -45,7 +45,7 @@ class SettingsTab(BaseTab):
         ("Value", 25),
         ("Type", 10),
     ]
-    available_actions: ClassVar[list[str]] = ["e"]
+    available_actions: ClassVar[list[str]] = ["e", "j"]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

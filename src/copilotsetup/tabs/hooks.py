@@ -15,7 +15,7 @@ class HooksTab(BaseTab):
         ("Command", 50),
         ("Type", 10),
     ]
-    available_actions: ClassVar[list[str]] = []
+    available_actions: ClassVar[list[str]] = ["j"]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

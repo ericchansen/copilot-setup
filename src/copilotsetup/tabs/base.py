@@ -81,6 +81,7 @@ class BaseTab(Container):
         self._current_filter: str = ""
         self._load_gen = itertools.count()
         self._active_gen: int = 0
+        self._detail_raw_mode: bool = False
 
     # --- compose --------------------------------------------------------------
 
@@ -240,7 +241,10 @@ class BaseTab(Container):
             detail.show_empty()
             return
         item = self._filtered_items[event.cursor_row]
-        detail.set_content(self.detail_for(item))
+        if self._detail_raw_mode:
+            detail.set_content(self._raw_detail_for(item))
+        else:
+            detail.set_content(self.detail_for(item))
 
     def get_selected_item(self) -> Any | None:
         """Return the domain object for the currently highlighted row."""
@@ -249,6 +253,36 @@ class BaseTab(Container):
         if idx is not None and 0 <= idx < len(self._filtered_items):
             return self._filtered_items[idx]
         return None
+
+    def _raw_detail_for(self, item: Any) -> str:
+        """Return pretty-printed JSON of the item's raw_data or raw_entry."""
+        import json as _json
+
+        raw = getattr(item, "raw_data", None) or getattr(item, "raw_entry", None)
+        if not raw:
+            return "[dim]No raw data available[/]"
+        try:
+            text = _json.dumps(raw, indent=2, default=str, ensure_ascii=False)
+        except (TypeError, ValueError):
+            text = repr(raw)
+        # Escape Rich markup characters
+        text = text.replace("[", "\\[")
+        return f"[bold reverse] RAW JSON [/bold reverse]\n\n{text}"
+
+    def toggle_json_view(self) -> None:
+        """Toggle between human-readable and raw JSON detail views."""
+        item = self.get_selected_item()
+        if item is None:
+            return
+        self._detail_raw_mode = not self._detail_raw_mode
+        try:
+            detail = self.query_one("#detail-pane", DetailPane)
+        except Exception:
+            return
+        if self._detail_raw_mode:
+            detail.set_content(self._raw_detail_for(item))
+        else:
+            detail.set_content(self.detail_for(item))
 
     # --- action dispatch ------------------------------------------------------
 
@@ -260,6 +294,7 @@ class BaseTab(Container):
         "u": "handle_upgrade",
         "m": "handle_marketplace",
         "h": "handle_health",
+        "j": "toggle_json_view",
     }
 
     def dispatch_action(self, key: str) -> None:

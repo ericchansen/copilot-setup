@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from copilotsetup.config import config_json, installed_plugins_dir
@@ -31,6 +31,8 @@ class PluginInfo:
 
     name: str
     source: str = ""
+    source_type: str = ""
+    source_repo: str = ""
     version: str = ""
     installed: bool = False
     disabled: bool = False
@@ -47,6 +49,7 @@ class PluginInfo:
     dev_branch: str = ""
     dev_commits_ahead: int = 0
     latest_release: str = ""
+    raw_data: dict = field(default_factory=dict, hash=False, compare=False)
 
     @property
     def status(self) -> str:
@@ -128,10 +131,20 @@ class PluginProvider:
                         if f.is_file() and f.name.endswith(".agent.md")
                     ]
 
+            # Extract source info from config.json source object
+            source_obj = entry.get("source")
+            source_type = ""
+            source_repo = ""
+            if isinstance(source_obj, dict):
+                source_type = str(source_obj.get("source", ""))
+                source_repo = str(source_obj.get("repo", "") or source_obj.get("path", ""))
+
             result.append(
                 PluginInfo(
                     name=str(name),
                     source=marketplace or "local",
+                    source_type=source_type,
+                    source_repo=source_repo,
                     version=version,
                     installed=True,
                     disabled=not enabled,
@@ -140,6 +153,7 @@ class PluginProvider:
                     bundled_skills=tuple(bundled_skills),
                     bundled_servers=tuple(bundled_servers),
                     bundled_agents=tuple(bundled_agents),
+                    raw_data=dict(entry),
                 )
             )
         return result

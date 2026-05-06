@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from copilotsetup.config import config_json
 from copilotsetup.utils.file_io import read_json
@@ -18,6 +18,7 @@ class HookInfo:
     event: str
     command: str
     hook_type: str = "command"
+    raw_data: dict = field(default_factory=dict, hash=False, compare=False)
 
 
 class HookProvider:
@@ -40,5 +41,5 @@ class HookProvider:
                 command = entry.get("command", "")
                 if not command:
                     continue
-                result.append(HookInfo(event=str(event_name), command=str(command)))
+                result.append(HookInfo(event=str(event_name), command=str(command), raw_data=dict(entry)))
         return result

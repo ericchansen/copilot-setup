@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from copilotsetup.config import extensions_dir
 
@@ -15,6 +15,7 @@ class ExtensionInfo:
     name: str
     path: str = ""
     version: str = ""
+    raw_data: dict = field(default_factory=dict, hash=False, compare=False)
 
 
 class ExtensionProvider:
@@ -29,6 +30,7 @@ class ExtensionProvider:
             if not entry.is_dir():
                 continue
             version = ""
+            data: dict = {}
             pkg_json = entry / "package.json"
             if pkg_json.is_file():
                 try:
@@ -36,5 +38,5 @@ class ExtensionProvider:
                     version = str(data.get("version", "") or "")
                 except (json.JSONDecodeError, OSError):
                     pass
-            result.append(ExtensionInfo(name=entry.name, path=str(entry), version=version))
+            result.append(ExtensionInfo(name=entry.name, path=str(entry), version=version, raw_data=data))
         return result

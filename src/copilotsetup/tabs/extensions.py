@@ -11,7 +11,7 @@ from copilotsetup.tabs.base import BaseTab
 class ExtensionsTab(BaseTab):
     tab_name = "Extensions"
     columns: ClassVar[list[tuple[str, int]]] = [("Name", 30), ("Version", 15), ("Path", 50)]
-    available_actions: ClassVar[list[str]] = []
+    available_actions: ClassVar[list[str]] = ["j"]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)

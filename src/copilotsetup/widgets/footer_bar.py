@@ -19,6 +19,7 @@ _ACTION_LABELS: dict[str, str] = {
     "u": "Upgrade",
     "m": "Marketplace",
     "h": "Health",
+    "j": "JSON",
 }
 
 

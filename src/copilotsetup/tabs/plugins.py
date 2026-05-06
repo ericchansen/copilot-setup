@@ -17,13 +17,15 @@ class PluginsTab(BaseTab):
     tab_name = "Plugins"
     columns: ClassVar[list[tuple[str, int]]] = [
         ("Name", 20),
-        ("Source", 12),
+        ("Marketplace", 16),
+        ("Source", 8),
+        ("Repo", 28),
         ("Version", 10),
         ("Status", 10),
         ("Upgrade", 12),
         ("Reason", 20),
     ]
-    available_actions: ClassVar[list[str]] = ["a", "x", "t", "u"]
+    available_actions: ClassVar[list[str]] = ["a", "x", "t", "u", "j"]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -152,7 +154,9 @@ class PluginsTab(BaseTab):
             upgrade = f"{upgrade} ⏳"
         return (
             item.name,
-            item.source,
+            item.marketplace or "—",
+            item.source_type or "—",
+            item.source_repo or "—",
             item.version,
             status_cell(status),
             upgrade,
@@ -162,7 +166,9 @@ class PluginsTab(BaseTab):
     def detail_for(self, item: PluginInfo) -> str:
         parts = [
             f"[bold]Name:[/] {item.name}",
-            f"[bold]Source:[/] {item.source}",
+            f"[bold]Marketplace:[/] {item.marketplace or '—'}",
+            f"[bold]Source:[/] {item.source_type or '—'}",
+            f"[bold]Repo:[/] {item.source_repo or '—'}",
             f"[bold]Version:[/] {item.version or '(unknown)'}",
             f"[bold]Status:[/] {item.status}",
         ]
@@ -176,7 +182,9 @@ class PluginsTab(BaseTab):
                 parts.append(f"  [dim]{item.dev_commits_ahead} commit(s) past last ancestor tag[/dim]")
             if item.latest_release:
                 parts.append(f"  [dim]Latest release on origin:[/dim] {item.latest_release}")
-            parts.append("  [dim]To pin to a release: cd <source>; git checkout <tag>; copilot plugin install .[/dim]")
+            path = item.install_path or "<path>"
+            tag = item.latest_release or "<tag>"
+            parts.append(f"  [dim]To pin to a release: cd {path}; git checkout {tag}; copilot plugin install .[/dim]")
         if item.reason:
             parts.append(f"[bold]Reason:[/] {item.reason}")
         if item.install_path:

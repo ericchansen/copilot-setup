@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from copilotsetup.config import config_json
 from copilotsetup.utils.file_io import read_json
@@ -37,6 +37,7 @@ class SettingInfo:
     display_name: str
     value: str
     value_type: str = "string"
+    raw_data: dict = field(default_factory=dict, hash=False, compare=False)
 
     @property
     def status(self) -> str:
@@ -96,6 +97,7 @@ class SettingsProvider:
                             display_name=flat_key,
                             value=_format_value(sub_val),
                             value_type=_value_type_for(sub_val),
+                            raw_data={flat_key: sub_val},
                         )
                     )
             elif isinstance(val, list):
@@ -105,6 +107,7 @@ class SettingsProvider:
                         display_name=key,
                         value=_format_value(val),
                         value_type="list",
+                        raw_data={key: val},
                     )
                 )
             elif isinstance(val, (str, bool, int, float)):
@@ -114,6 +117,7 @@ class SettingsProvider:
                         display_name=key,
                         value=str(val),
                         value_type=_value_type_for(val),
+                        raw_data={key: val},
                     )
                 )
         return result
