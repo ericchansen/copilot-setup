@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import shlex
+from contextlib import suppress
+from dataclasses import replace
 from typing import Any, ClassVar
 
 from copilotsetup.data.mcp_servers import McpServerInfo, McpServerProvider
@@ -172,6 +174,7 @@ class McpServersTab(BaseTab):
                 result = probe_server_entry(item.name, dict(item.raw_entry))
                 latency = f" ({result.latency_ms}ms)" if result.latency_ms else ""
                 detail = f": {result.detail}" if result.detail else ""
+                latency_str = f"{result.latency_ms}ms" if result.latency_ms else ""
                 if result.health == "ok":
                     msg = f"[bold]{item.name}[/] — ✓ ok{latency}{detail}"
                     self.app.call_from_thread(self.notify, msg, title="Health")
@@ -183,6 +186,7 @@ class McpServersTab(BaseTab):
                         severity="error",
                         title="Health",
                     )
+                self.app.call_from_thread(self._update_health, item.name, result.health, latency_str)
             except Exception as exc:
                 self.app.call_from_thread(
                     self.notify,
@@ -192,3 +196,31 @@ class McpServersTab(BaseTab):
                 )
 
         threading.Thread(target=_probe, daemon=True).start()
+
+    def _update_health(self, name: str, health: str, latency: str) -> None:
+        """Write probe result back into the data list and table cell."""
+        from textual.widgets import DataTable
+
+        for lst in (self._items, self._filtered_items):
+            for i, it in enumerate(lst):
+                if it.name == name:
+                    lst[i] = replace(it, health=health, health_latency=latency)
+                    break
+
+        table = self.query_one("#tab-table", DataTable)
+        with suppress(Exception):
+            table.update_cell(name, "Health", health or "—")
+
+        # Refresh detail pane if this row is currently selected
+        selected = self.get_selected_item()
+        if selected and selected.name == name:
+            from copilotsetup.widgets.detail_pane import DetailPane
+
+            try:
+                detail = self.query_one("#detail-pane", DetailPane)
+                if self._detail_raw_mode:
+                    detail.set_content(self._raw_detail_for(selected))
+                else:
+                    detail.set_content(self.detail_for(selected))
+            except Exception:
+                pass
