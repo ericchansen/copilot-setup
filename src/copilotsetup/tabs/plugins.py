@@ -30,12 +30,25 @@ class PluginsTab(BaseTab):
         self._provider = PluginProvider()
 
     def load_items(self) -> list[PluginInfo]:
-        items = self._provider.load()
-        self._check_upgrades_async(items)
-        return items
+        return self._provider.load()
 
-    def _check_upgrades_async(self, items: list[PluginInfo]) -> None:
-        """Kick off background upgrade detection for git-backed plugins."""
+    def _populate(self, items: list, gen: int) -> None:
+        """Override to kick off upgrade checks from the main thread."""
+        super()._populate(items, gen)
+        if gen != self._active_gen:
+            return
+        force = getattr(self, "_force_refresh", False)
+        self._force_refresh = False
+        self._check_upgrades_async(items, gen, force)
+
+    def _check_upgrades_async(self, items: list[PluginInfo], gen: int, force: bool) -> None:
+        """Kick off background upgrade detection for git-backed plugins.
+
+        Uses two-phase loading on initial launch:
+        Phase 1 — show cached results immediately (provisional, no network).
+        Phase 2 — force-refresh from network and update display.
+        Manual refresh (``r`` key) skips Phase 1 and goes straight to network.
+        """
         import threading
 
         from copilotsetup.upgrade_cache import UpgradeCache
@@ -45,15 +58,26 @@ class PluginsTab(BaseTab):
             return
 
         cache = UpgradeCache.get_instance()
-        force = getattr(self, "_force_refresh", False)
-        self._force_refresh = False
 
         def _run() -> None:
             try:
-                results = [cache.get_or_check(name, path, version, force=force) for name, path, version in plugins]
-                result_map = {r.name: r for r in results}
-                # call_from_thread is an App method, not a Widget method
-                self.app.call_from_thread(self._apply_upgrades, result_map)
+                # Phase 1: cache-only pass, no network (skip if manual refresh)
+                if not force:
+                    cached_map: dict = {}
+                    for name, path, version in plugins:
+                        cached_latest = cache.get(name)
+                        if cached_latest is not None:
+                            from copilotsetup.plugin_upgrades import check_plugin
+
+                            info = check_plugin(path, name, version, _cached_latest=cached_latest)
+                            cached_map[name] = info
+                    if cached_map:
+                        self.app.call_from_thread(self._apply_upgrades, cached_map, gen, True)
+
+                # Phase 2: force-refresh from network
+                fresh_results = [cache.get_or_check(name, path, version, force=True) for name, path, version in plugins]
+                fresh_map = {r.name: r for r in fresh_results}
+                self.app.call_from_thread(self._apply_upgrades, fresh_map, gen, False)
             except Exception:
                 logger.debug("Upgrade check failed", exc_info=True)
 
@@ -64,8 +88,10 @@ class PluginsTab(BaseTab):
         self._force_refresh = True
         super().refresh_data()
 
-    def _apply_upgrades(self, result_map: dict) -> None:
+    def _apply_upgrades(self, result_map: dict, gen: int, provisional: bool = False) -> None:
         """Merge upgrade results into current items and refresh the table."""
+        if gen != self._active_gen:
+            return  # stale result from a superseded load
         from dataclasses import replace
 
         new_items = []
@@ -77,10 +103,10 @@ class PluginsTab(BaseTab):
                     upgrade_available=True,
                     upgrade_summary=info.summary,
                     upgrade_version=info.latest_version,
+                    upgrade_provisional=provisional,
                 )
             else:
-                # Checked, no upgrade — clear the loading indicator
-                item = replace(item, upgrade_summary="—")
+                item = replace(item, upgrade_summary="—", upgrade_provisional=provisional)
             new_items.append(item)
         self._items = new_items
         self._apply_filter()
@@ -91,6 +117,8 @@ class PluginsTab(BaseTab):
     def row_for(self, item: PluginInfo) -> tuple:
         status: Status = item.status  # type: ignore[assignment]
         upgrade = item.upgrade_summary if item.upgrade_summary else "…"
+        if item.upgrade_provisional and item.upgrade_summary:
+            upgrade = f"{item.upgrade_summary} ⏳"
         return (
             item.name,
             item.source,
@@ -108,7 +136,8 @@ class PluginsTab(BaseTab):
             f"[bold]Status:[/] {item.status}",
         ]
         if item.upgrade_summary:
-            parts.append(f"[bold]Upgrade:[/] [green]{item.upgrade_summary}[/green]")
+            suffix = " [dim](cached)[/]" if item.upgrade_provisional else ""
+            parts.append(f"[bold]Upgrade:[/] [green]{item.upgrade_summary}[/green]{suffix}")
         if item.reason:
             parts.append(f"[bold]Reason:[/] {item.reason}")
         if item.install_path:

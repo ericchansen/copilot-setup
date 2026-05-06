@@ -42,6 +42,7 @@ class PluginInfo:
     upgrade_available: bool = False
     upgrade_summary: str = ""
     upgrade_version: str = ""
+    upgrade_provisional: bool = False
 
     @property
     def status(self) -> str:
