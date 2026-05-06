@@ -43,6 +43,10 @@ class PluginInfo:
     upgrade_summary: str = ""
     upgrade_version: str = ""
     upgrade_provisional: bool = False
+    dev_summary: str = ""
+    dev_branch: str = ""
+    dev_commits_ahead: int = 0
+    latest_release: str = ""
 
     @property
     def status(self) -> str:

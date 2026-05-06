@@ -13,6 +13,7 @@ from typing import Any
 
 from copilotsetup.config import upgrade_cache_json
 from copilotsetup.plugin_upgrades import (
+    STATUS_LOCAL_DEV,
     STATUS_UP_TO_DATE,
     STATUS_UPGRADABLE,
     PluginUpgradeInfo,
@@ -99,7 +100,11 @@ class UpgradeCache:
         info = check_plugin(install_path, name, config_version, _cached_latest=cached_latest)
         if cached_latest is None:
             # Only cache when network was actually consulted.
-            cacheable = info.status == STATUS_UPGRADABLE or (info.status == STATUS_UP_TO_DATE and info.network_verified)
+            cacheable = (
+                info.status == STATUS_UPGRADABLE
+                or (info.status == STATUS_UP_TO_DATE and info.network_verified)
+                or (info.status == STATUS_LOCAL_DEV and info.network_verified and bool(info.latest_version))
+            )
             if cacheable:
                 version_to_cache = info.latest_version or info.current_version
                 if version_to_cache:

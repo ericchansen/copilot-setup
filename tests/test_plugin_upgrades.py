@@ -187,16 +187,22 @@ def test_check_plugin_no_tags_no_config_version(tmp_path):
     assert "not on a version tag" in info.detail
 
 
-# --- check_plugin: ancestor tag fallback ---
+# --- check_plugin: dev-checkout (branch HEAD) ---
 
 
-def test_check_plugin_ancestor_tag(tmp_path):
-    """When HEAD is ahead of a tag, --abbrev=0 should find the ancestor tag."""
+def test_check_plugin_dev_checkout_on_branch(tmp_path):
+    """When HEAD is on a branch (not a tag), status is STATUS_LOCAL_DEV — never STATUS_UPGRADABLE.
+
+    This is the core bug fix: the previous behavior used `git describe --abbrev=0`
+    to fall back to an ancestor tag and falsely report the dev branch as upgradable.
+    """
+    from copilotsetup.plugin_upgrades import STATUS_LOCAL_DEV
 
     def mock_run_git(args, cwd, *, timeout=30.0):
         from unittest.mock import MagicMock
 
         result = MagicMock()
+        result.stderr = ""
         if args[0] == "rev-parse":
             result.returncode = 0
             result.stdout = "true"
@@ -204,26 +210,176 @@ def test_check_plugin_ancestor_tag(tmp_path):
             result.returncode = 0
             result.stdout = ""
         elif args[0] == "describe" and "--exact-match" in args:
+            # HEAD is not on an exact tag (we're on a dev branch).
             result.returncode = 1
             result.stdout = ""
         elif args[0] == "describe" and "--abbrev=0" in args:
+            # Nearest ancestor tag is v1.1.0.
             result.returncode = 0
             result.stdout = "v1.1.0\n"
+        elif args[0] == "symbolic-ref":
+            # On branch feat/gh-writer.
+            result.returncode = 0
+            result.stdout = "feat/gh-writer\n"
+        elif args[0] == "rev-list":
+            # 4 commits past v1.1.0.
+            result.returncode = 0
+            result.stdout = "4\n"
         elif args[0] == "ls-remote":
             result.returncode = 0
-            result.stdout = "abc123\trefs/tags/v1.1.0\ndef456\trefs/tags/v1.2.0\n"
+            result.stdout = "abc\trefs/tags/v1.1.0\ndef\trefs/tags/v2.0.2\n"
         else:
             result.returncode = 1
             result.stdout = ""
+        return result
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        info = check_plugin(str(tmp_path), "test-plugin")
+
+    assert info.status == STATUS_LOCAL_DEV
+    assert info.upgrade_available is False  # critical: no fake upgrade arrow
+    assert info.dev_branch == "feat/gh-writer"
+    assert info.dev_commits_ahead == 4
+    assert info.current_version == "v1.1.0"  # for context only
+    assert info.latest_version == "v2.0.2"  # surfaced for detail pane
+    assert info.summary == ""  # no row-level "↑ vX.Y.Z"
+    assert info.dev_summary == "dev: feat/gh-writer"
+
+
+def test_check_plugin_dev_checkout_no_ancestor_tag(tmp_path):
+    """Dev checkout with no ancestor tag still reports STATUS_LOCAL_DEV."""
+    from copilotsetup.plugin_upgrades import STATUS_LOCAL_DEV
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        from unittest.mock import MagicMock
+
+        result = MagicMock()
         result.stderr = ""
+        if args[0] == "rev-parse":
+            result.returncode = 0
+            result.stdout = "true"
+        elif args[0] == "fetch":
+            result.returncode = 0
+            result.stdout = ""
+        elif args[0] == "describe":
+            result.returncode = 1
+            result.stdout = ""
+        elif args[0] == "symbolic-ref":
+            result.returncode = 0
+            result.stdout = "main\n"
+        elif args[0] == "rev-list":
+            result.returncode = 1
+            result.stdout = ""
+        elif args[0] == "ls-remote":
+            result.returncode = 0
+            result.stdout = ""
+        else:
+            result.returncode = 1
+            result.stdout = ""
+        return result
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        info = check_plugin(str(tmp_path), "test-plugin")
+
+    assert info.status == STATUS_LOCAL_DEV
+    assert info.dev_branch == "main"
+    assert info.current_version == ""  # no ancestor tag known
+    assert info.latest_version == ""
+    assert info.upgrade_available is False
+
+
+def test_check_plugin_detached_on_exact_tag_still_works(tmp_path):
+    """Marketplace install: detached HEAD on an exact tag → normal upgrade flow."""
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        from unittest.mock import MagicMock
+
+        result = MagicMock()
+        result.stderr = ""
+        if args[0] == "rev-parse":
+            result.returncode = 0
+            result.stdout = "true"
+        elif args[0] == "fetch":
+            result.returncode = 0
+            result.stdout = ""
+        elif args[0] == "describe" and "--exact-match" in args:
+            result.returncode = 0
+            result.stdout = "v1.0.0\n"
+        elif args[0] == "symbolic-ref":
+            # Detached HEAD — would never be called in this path, but be defensive.
+            result.returncode = 1
+            result.stdout = ""
+        elif args[0] == "ls-remote":
+            result.returncode = 0
+            result.stdout = "abc\trefs/tags/v1.0.0\ndef\trefs/tags/v2.0.0\n"
+        else:
+            result.returncode = 1
+            result.stdout = ""
         return result
 
     with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
         info = check_plugin(str(tmp_path), "test-plugin")
 
     assert info.status == STATUS_UPGRADABLE
-    assert info.current_version == "v1.1.0"
-    assert info.latest_version == "v1.2.0"
+    assert info.current_version == "v1.0.0"
+    assert info.latest_version == "v2.0.0"
+    assert info.upgrade_available is True
+    assert info.dev_branch == ""
+    assert info.dev_summary == ""
+
+
+def test_check_plugin_branch_at_exact_tag_still_dev(tmp_path):
+    """Regression: HEAD on a branch whose tip is also at an exact tag → STATUS_LOCAL_DEV.
+
+    Even though ``git describe --exact-match`` succeeds (branch HEAD coincides
+    with a tag), ``copilot plugin update`` would do ``git pull <branch>`` rather
+    than ``git checkout <newer-tag>``, so we must NOT show a one-click upgrade
+    arrow. Branch state is authoritative.
+    """
+    from copilotsetup.plugin_upgrades import STATUS_LOCAL_DEV
+
+    def mock_run_git(args, cwd, *, timeout=30.0):
+        from unittest.mock import MagicMock
+
+        result = MagicMock()
+        result.stderr = ""
+        if args[0] == "rev-parse":
+            result.returncode = 0
+            result.stdout = "true"
+        elif args[0] == "fetch":
+            result.returncode = 0
+            result.stdout = ""
+        elif args[0] == "symbolic-ref":
+            # On branch ``main`` whose HEAD coincides with v1.0.0.
+            result.returncode = 0
+            result.stdout = "main\n"
+        elif args[0] == "describe" and "--exact-match" in args:
+            # If anything still asks for exact-match, HEAD is at v1.0.0.
+            result.returncode = 0
+            result.stdout = "v1.0.0\n"
+        elif args[0] == "describe" and "--abbrev=0" in args:
+            result.returncode = 0
+            result.stdout = "v1.0.0\n"
+        elif args[0] == "rev-list" and "--count" in args:
+            result.returncode = 0
+            result.stdout = "0\n"
+        elif args[0] == "ls-remote":
+            result.returncode = 0
+            result.stdout = "abc\trefs/tags/v1.0.0\ndef\trefs/tags/v2.0.0\n"
+        else:
+            result.returncode = 1
+            result.stdout = ""
+        return result
+
+    with patch("copilotsetup.plugin_upgrades._run_git", side_effect=mock_run_git):
+        info = check_plugin(str(tmp_path), "test-plugin")
+
+    assert info.status == STATUS_LOCAL_DEV, (
+        f"branch HEAD that happens to coincide with a tag must still be dev, got {info.status}"
+    )
+    assert info.dev_branch == "main"
+    assert info.upgrade_available is False
+    assert info.latest_version == "v2.0.0"
 
 
 # --- check_all ---
@@ -329,6 +485,9 @@ def test_check_plugin_cached_latest_skips_fetch(tmp_path):
     subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=str(tmp_path), capture_output=True)
     subprocess.run(["git", "tag", "v1.0.0"], cwd=str(tmp_path), capture_output=True)
+    # Detach HEAD onto the tag — this matches what ``copilot plugin install <git-url>``
+    # does in production. A repo left on a branch is now treated as STATUS_LOCAL_DEV.
+    subprocess.run(["git", "checkout", "v1.0.0"], cwd=str(tmp_path), capture_output=True)
 
     from copilotsetup.plugin_upgrades import check_plugin
 
@@ -350,6 +509,7 @@ def test_check_plugin_cached_latest_up_to_date(tmp_path):
     subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=str(tmp_path), capture_output=True)
     subprocess.run(["git", "tag", "v1.0.0"], cwd=str(tmp_path), capture_output=True)
+    subprocess.run(["git", "checkout", "v1.0.0"], cwd=str(tmp_path), capture_output=True)
 
     from copilotsetup.plugin_upgrades import check_plugin
 
@@ -372,6 +532,8 @@ def test_check_plugin_fetch_fails_uses_local_tags(tmp_path):
     subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=str(tmp_path), capture_output=True)
     subprocess.run(["git", "tag", "v1.0.0"], cwd=str(tmp_path), capture_output=True)
+    # Detach onto v1.0.0 so HEAD is at an exact tag (marketplace-style install).
+    subprocess.run(["git", "checkout", "v1.0.0"], cwd=str(tmp_path), capture_output=True)
     # Add a higher local tag (simulates a previous successful fetch)
     subprocess.run(["git", "tag", "v2.0.0"], cwd=str(tmp_path), capture_output=True)
 
