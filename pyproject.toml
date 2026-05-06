@@ -1,6 +1,6 @@
 [project]
 name = "copilot-setup"
-version = "0.3.2"
+version = "0.3.3"
 description = "A TUI dashboard for viewing and managing GitHub Copilot CLI configuration"
 readme = "README.md"
 license = "MIT"
