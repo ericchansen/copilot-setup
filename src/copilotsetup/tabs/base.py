@@ -99,7 +99,7 @@ class BaseTab(Container):
     def on_mount(self) -> None:
         table = self.query_one("#tab-table", DataTable)
         for header, width in self.columns:
-            table.add_column(header, width=width)
+            table.add_column(header, width=width, key=header)
         table.loading = True
         self.query_one("#empty-state", Label).display = False
         self._start_load()
