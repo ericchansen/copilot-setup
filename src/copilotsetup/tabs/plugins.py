@@ -184,7 +184,10 @@ class PluginsTab(BaseTab):
                 parts.append(f"  [dim]Latest release on origin:[/dim] {item.latest_release}")
             path = item.install_path or "<path>"
             tag = item.latest_release or "<tag>"
-            parts.append(f"  [dim]To pin to a release: cd {path}; git checkout {tag}; copilot plugin install .[/dim]")
+            reinstall = f"{item.name}@{item.marketplace}" if item.marketplace else "<name>@<marketplace>"
+            parts.append(
+                f"  [dim]To pin to a release: cd {path}; git checkout {tag}; copilot plugin install {reinstall}[/dim]"
+            )
         if item.reason:
             parts.append(f"[bold]Reason:[/] {item.reason}")
         if item.install_path:
@@ -273,7 +276,8 @@ class PluginsTab(BaseTab):
             self.notify(
                 f"{item.name}: local dev install on branch [bold]{branch}[/]. "
                 f"To pin to a release, run in the source repo: "
-                f"[bold]git checkout {target}; copilot plugin install .[/]",
+                f"[bold]git checkout {target}; copilot plugin install "
+                f"{item.name}@{item.marketplace if item.marketplace else '<marketplace>'}[/]",
                 severity="warning",
                 title="Upgrade",
                 timeout=12,
