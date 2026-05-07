@@ -315,6 +315,7 @@ class TestDevState:
             dev_summary="dev: feat/gh-writer",
             dev_branch="feat/gh-writer",
             latest_release="v2.0.2",
+            marketplace="github",
         )
 
         tab = MagicMock(spec=PluginsTab)
@@ -337,6 +338,8 @@ class TestDevState:
         assert "feat/gh-writer" in msg
         assert "git checkout v2.0.2" in msg
         assert "copilot plugin install" in msg
+        assert "copilot plugin install ." not in msg  # bare dot is invalid
+        assert "test-plugin@github" in msg  # should use name@marketplace form
 
     def test_handle_upgrade_normal_path_unchanged(self):
         """Non-dev plugins with upgrade_available still call the CLI."""

@@ -439,6 +439,7 @@ def test_git_env_preserves_existing_ssh_command(monkeypatch):
 
 def test_git_env_uses_gh_token_env(monkeypatch):
     """_git_env() injects GH_TOKEN via GIT_CONFIG_COUNT when set."""
+    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
     monkeypatch.setenv("GH_TOKEN", "ghp_test123")
     from copilotsetup.plugin_upgrades import _git_env
 
@@ -449,6 +450,7 @@ def test_git_env_uses_gh_token_env(monkeypatch):
 
 def test_git_env_uses_github_token_env(monkeypatch):
     """_git_env() falls back to GITHUB_TOKEN if GH_TOKEN not set."""
+    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_TOKEN", "ghs_fallback456")
     from copilotsetup.plugin_upgrades import _git_env
@@ -460,6 +462,9 @@ def test_git_env_uses_github_token_env(monkeypatch):
 
 def test_git_env_no_token_no_gh(monkeypatch):
     """_git_env() gracefully handles no token and no gh CLI."""
+    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
+    monkeypatch.delenv("GIT_CONFIG_KEY_0", raising=False)
+    monkeypatch.delenv("GIT_CONFIG_VALUE_0", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     with patch("copilotsetup.plugin_upgrades.subprocess.run", side_effect=FileNotFoundError):
